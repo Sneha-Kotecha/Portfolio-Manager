@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import logging
-import yfinance as yf
 from sklearn.preprocessing import StandardScaler
 import torch
 import torch.nn as nn
