@@ -1,0 +1,255 @@
+
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Portfolio Report - 2025-06-30</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background-color: #f8f9fa; }
+                .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .header { background: linear-gradient(135deg, #1f77b4, #17a2b8); color: white; padding: 30px; margin: -20px -20px 30px -20px; border-radius: 8px 8px 0 0; }
+                .header h1 { margin: 0 0 10px 0; font-size: 2.5em; }
+                .header p { margin: 5px 0; opacity: 0.9; }
+                .section { margin-bottom: 30px; padding: 20px; border-left: 4px solid #1f77b4; background: #f8f9fa; border-radius: 0 8px 8px 0; }
+                .section h2 { margin-top: 0; color: #1f77b4; border-bottom: 2px solid #e9ecef; padding-bottom: 10px; }
+                .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+                .metric { padding: 15px; background: white; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .metric-value { font-size: 1.8em; font-weight: bold; color: #1f77b4; }
+                .metric-label { font-size: 0.9em; color: #6c757d; margin-top: 5px; }
+                .alert { padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid; }
+                .alert-critical { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+                .alert-warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+                .alert-info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+                .alert-positive { background: #d4edda; border-color: #28a745; color: #155724; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                th { padding: 15px; text-align: left; background: #1f77b4; color: white; font-weight: 600; }
+                td { padding: 12px 15px; border-bottom: 1px solid #e9ecef; }
+                tbody tr:hover { background: #f8f9fa; }
+                .chart-container { margin: 25px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .chart-container h3 { margin-top: 0; color: #495057; }
+                .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: 600; }
+                .status-normal { background: #d4edda; color: #155724; }
+                .status-warning { background: #fff3cd; color: #856404; }
+                .status-critical { background: #f8d7da; color: #721c24; }
+                .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e9ecef; color: #6c757d; font-size: 0.9em; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>Portfolio Performance Report</h1>
+                    <p><strong>Generated:</strong> 2025-06-30T20:22:17.403410</p>
+                    <p><strong>Report Period:</strong> 30 days</p>
+                    <p><strong>Report Style:</strong> Professional</p>
+                </div>
+                
+                <!-- Executive Summary -->
+                <div class="section">
+                    <h2>📊 Executive Summary</h2>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-value">$1200000</div>
+                            <div class="metric-label">Portfolio Value</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">15.00%</div>
+                            <div class="metric-label">Total Return</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">1.20</div>
+                            <div class="metric-label">Sharpe Ratio</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">3</div>
+                            <div class="metric-label">Positions</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">12.5%</div>
+                            <div class="metric-label">Cash Allocation</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value status-normal">MEDIUM</div>
+                            <div class="metric-label">Risk Level</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Charts -->
+                
+                <div class="section">
+                    <h2>📈 Performance Charts</h2>
+                    
+                    
+                    <div class="chart-container">
+                        <h3>Portfolio Performance</h3>
+                        <html>
+<head><meta charset="utf-8" /></head>
+<body>
+    <div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script src="https://cdn.plot.ly/plotly-2.12.1.min.js"></script>                <div id="f95cff40-ff50-49d0-b30f-166bb1ddf93d" class="plotly-graph-div" style="height:800px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("f95cff40-ff50-49d0-b30f-166bb1ddf93d")) {                    Plotly.newPlot(                        "f95cff40-ff50-49d0-b30f-166bb1ddf93d",                        [{"hovertemplate":"<b>Date:</b> %{x}<br><b>Value:</b> $%{y:,.2f}<extra></extra>","line":{"color":"#1f77b4","width":2},"mode":"lines","name":"Portfolio Value","x":["2025-05-31T20:22:17.355899","2025-06-01T20:22:17.355930","2025-06-02T20:22:17.355933","2025-06-03T20:22:17.355937","2025-06-04T20:22:17.355940","2025-06-05T20:22:17.355943","2025-06-06T20:22:17.355946","2025-06-07T20:22:17.355949","2025-06-08T20:22:17.355952","2025-06-09T20:22:17.355955","2025-06-10T20:22:17.355958","2025-06-11T20:22:17.355960","2025-06-12T20:22:17.355963","2025-06-13T20:22:17.355965","2025-06-14T20:22:17.355968","2025-06-15T20:22:17.355971","2025-06-16T20:22:17.355974","2025-06-17T20:22:17.355976","2025-06-18T20:22:17.355979","2025-06-19T20:22:17.355982","2025-06-20T20:22:17.355984","2025-06-21T20:22:17.355987","2025-06-22T20:22:17.355990","2025-06-23T20:22:17.355993","2025-06-24T20:22:17.355996","2025-06-25T20:22:17.355998","2025-06-26T20:22:17.356001","2025-06-27T20:22:17.356004","2025-06-28T20:22:17.356006","2025-06-29T20:22:17.356009"],"y":[1041084.8558622769,1088356.9709790607,1036555.9112284331,1060126.5663297721,980802.8780235534,1050873.9263782562,1007688.8339749394,998840.272937053,1109999.3290783486,1006994.8901505945,1026785.4586477937,981435.6143539128,929768.8540935064,1029784.4490911058,985427.0705387547,995112.3120368663,1024804.7681754065,991332.8959025932,1067221.9727601567,964582.0706475179,1025917.3500071934,973908.0437285361,959471.5154750329,999349.1789658875,1026018.5165546241,1050115.0436898943,1065200.2963180237,955934.9800858329,936558.1979774471,981889.8053021042],"type":"scatter","xaxis":"x","yaxis":"y"},{"fill":"tozeroy","hovertemplate":"<b>Date:</b> %{x}<br><b>Return:</b> %{y:.2f}%<extra></extra>","line":{"color":"#2ca02c","width":2},"mode":"lines","name":"Cumulative Return","x":["2025-05-31T20:22:17.355899","2025-06-01T20:22:17.355930","2025-06-02T20:22:17.355933","2025-06-03T20:22:17.355937","2025-06-04T20:22:17.355940","2025-06-05T20:22:17.355943","2025-06-06T20:22:17.355946","2025-06-07T20:22:17.355949","2025-06-08T20:22:17.355952","2025-06-09T20:22:17.355955","2025-06-10T20:22:17.355958","2025-06-11T20:22:17.355960","2025-06-12T20:22:17.355963","2025-06-13T20:22:17.355965","2025-06-14T20:22:17.355968","2025-06-15T20:22:17.355971","2025-06-16T20:22:17.355974","2025-06-17T20:22:17.355976","2025-06-18T20:22:17.355979","2025-06-19T20:22:17.355982","2025-06-20T20:22:17.355984","2025-06-21T20:22:17.355987","2025-06-22T20:22:17.355990","2025-06-23T20:22:17.355993","2025-06-24T20:22:17.355996","2025-06-25T20:22:17.355998","2025-06-26T20:22:17.356001","2025-06-27T20:22:17.356004","2025-06-28T20:22:17.356006","2025-06-29T20:22:17.356009"],"y":[0.0,4.540659183600448,-0.4350216611394897,1.8290257859647774,-5.790303979476774,0.9402759497324054,-3.2078097860406607,-4.057746367872661,6.619486666050234,-3.2744656230204616,-1.3735092902335655,-5.729527345680163,-10.692308234238334,-1.0854453128906094,-5.346133411711551,-4.415830618084815,-1.5637618389315988,-4.778857331324515,2.510565469347048,-7.348371728200354,-1.4568942934551687,-6.4525779772391045,-7.839259204250737,-4.008864086474661,-1.4471768773520521,0.8673824978597144,2.3163760686705226,-8.178956335496657,-10.040166975462894,-5.685900647468777],"type":"scatter","xaxis":"x2","yaxis":"y2"},{"hovertemplate":"<b>Date:</b> %{x}<br><b>P&L:</b> $%{y:,.2f}<extra></extra>","marker":{"color":["#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#d62728","#2ca02c","#2ca02c","#2ca02c","#d62728","#d62728","#d62728","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#d62728","#d62728","#d62728","#d62728","#2ca02c"]},"name":"Daily P&L","x":["2025-05-31T20:22:17.355899","2025-06-01T20:22:17.355930","2025-06-02T20:22:17.355933","2025-06-03T20:22:17.355937","2025-06-04T20:22:17.355940","2025-06-05T20:22:17.355943","2025-06-06T20:22:17.355946","2025-06-07T20:22:17.355949","2025-06-08T20:22:17.355952","2025-06-09T20:22:17.355955","2025-06-10T20:22:17.355958","2025-06-11T20:22:17.355960","2025-06-12T20:22:17.355963","2025-06-13T20:22:17.355965","2025-06-14T20:22:17.355968","2025-06-15T20:22:17.355971","2025-06-16T20:22:17.355974","2025-06-17T20:22:17.355976","2025-06-18T20:22:17.355979","2025-06-19T20:22:17.355982","2025-06-20T20:22:17.355984","2025-06-21T20:22:17.355987","2025-06-22T20:22:17.355990","2025-06-23T20:22:17.355993","2025-06-24T20:22:17.355996","2025-06-25T20:22:17.355998","2025-06-26T20:22:17.356001","2025-06-27T20:22:17.356004","2025-06-28T20:22:17.356006","2025-06-29T20:22:17.356009"],"y":[5583.684365389844,8129.311978592506,19186.754393920648,3212.515698565141,2193.626379026347,512.8065950501931,1632.1001756827377,3167.201184702505,3465.929817963518,3557.769042661015,16457.023415515217,-2673.49042124233,11942.607984260716,8658.124675699773,11998.830590598747,-710.267345539176,-7436.966707626011,-3295.389355377366,6153.437671071513,10537.381595976172,1663.4740313871894,14320.119140225135,2593.7285505168106,5948.527356559297,5084.585211117763,-13361.866494461183,-8364.28488716938,-7911.488926872242,-14477.678350027152,24992.652566443696],"type":"bar","xaxis":"x3","yaxis":"y3"},{"fill":"tozeroy","hovertemplate":"<b>Date:</b> %{x}<br><b>Drawdown:</b> %{y:.2f}%<extra></extra>","line":{"color":"#d62728","width":2},"mode":"lines","name":"Drawdown","x":["2025-05-31T20:22:17.355899","2025-06-01T20:22:17.355930","2025-06-02T20:22:17.355933","2025-06-03T20:22:17.355937","2025-06-04T20:22:17.355940","2025-06-05T20:22:17.355943","2025-06-06T20:22:17.355946","2025-06-07T20:22:17.355949","2025-06-08T20:22:17.355952","2025-06-09T20:22:17.355955","2025-06-10T20:22:17.355958","2025-06-11T20:22:17.355960","2025-06-12T20:22:17.355963","2025-06-13T20:22:17.355965","2025-06-14T20:22:17.355968","2025-06-15T20:22:17.355971","2025-06-16T20:22:17.355974","2025-06-17T20:22:17.355976","2025-06-18T20:22:17.355979","2025-06-19T20:22:17.355982","2025-06-20T20:22:17.355984","2025-06-21T20:22:17.355987","2025-06-22T20:22:17.355990","2025-06-23T20:22:17.355993","2025-06-24T20:22:17.355996","2025-06-25T20:22:17.355998","2025-06-26T20:22:17.356001","2025-06-27T20:22:17.356004","2025-06-28T20:22:17.356006","2025-06-29T20:22:17.356009"],"y":[0.0,0.0,-4.759565209935539,-2.593855270104367,-9.882244137119292,-3.444002804253249,-7.411918989369282,-8.224939098931907,0.0,-9.279684791636802,-7.496749615123528,-11.58232364259035,-16.236989542551406,-7.226570132600578,-11.222732777958377,-10.350187971453543,-7.675190306077084,-10.690676117280736,-3.8538182139002397,-13.100661831171836,-7.574957648034787,-12.26048356829291,-13.561072485359208,-9.968488017405901,-7.565843539153777,-5.3949839265378,-4.035951336792454,-13.879679469755892,-15.62533657069078,-11.541405514417374],"type":"scatter","xaxis":"x4","yaxis":"y4"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"xaxis":{"anchor":"y","domain":[0.0,1.0]},"yaxis":{"anchor":"x","domain":[0.72,1.0]},"xaxis2":{"anchor":"y2","domain":[0.0,1.0]},"yaxis2":{"anchor":"x2","domain":[0.36,0.6399999999999999]},"xaxis3":{"anchor":"y3","domain":[0.0,0.45]},"yaxis3":{"anchor":"x3","domain":[0.0,0.27999999999999997]},"xaxis4":{"anchor":"y4","domain":[0.55,1.0]},"yaxis4":{"anchor":"x4","domain":[0.0,0.27999999999999997]},"annotations":[{"font":{"size":16},"showarrow":false,"text":"Portfolio Value Over Time","x":0.5,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"Cumulative Returns","x":0.5,"xanchor":"center","xref":"paper","y":0.6399999999999999,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"Daily P&L","x":0.225,"xanchor":"center","xref":"paper","y":0.27999999999999997,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"Drawdown Analysis","x":0.775,"xanchor":"center","xref":"paper","y":0.27999999999999997,"yanchor":"bottom","yref":"paper"}],"title":{"font":{"size":20},"text":"Portfolio Performance Dashboard","x":0.5,"xanchor":"center"},"height":800,"showlegend":true},                        {"responsive": true}                    )                };                            </script>        </div>
+</body>
+</html>
+                    </div>
+                    
+                    
+                    
+                    <div class="chart-container">
+                        <h3>Position Analysis</h3>
+                        <html>
+<head><meta charset="utf-8" /></head>
+<body>
+    <div>                        <script type="text/javascript">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script src="https://cdn.plot.ly/plotly-2.12.1.min.js"></script>                <div id="d425babd-01b3-457b-bde5-05757437afc3" class="plotly-graph-div" style="height:700px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("d425babd-01b3-457b-bde5-05757437afc3")) {                    Plotly.newPlot(                        "d425babd-01b3-457b-bde5-05757437afc3",                        [{"hovertemplate":"<b>Symbol:</b> %{x}<br><b>Market_Value:</b> %{y:.2f}<extra></extra>","marker":{"color":"#1f77b4"},"name":"Position Weight","x":["AAPL","MSFT","GOOGL"],"y":[27000,30000,9750],"type":"bar","xaxis":"x","yaxis":"y"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"xaxis":{"anchor":"y","domain":[0.0,0.45]},"yaxis":{"anchor":"x","domain":[0.575,1.0]},"xaxis2":{"anchor":"y2","domain":[0.55,1.0]},"yaxis2":{"anchor":"x2","domain":[0.575,1.0]},"xaxis3":{"anchor":"y3","domain":[0.0,0.45]},"yaxis3":{"anchor":"x3","domain":[0.0,0.425]},"xaxis4":{"anchor":"y4","domain":[0.55,1.0]},"yaxis4":{"anchor":"x4","domain":[0.0,0.425]},"annotations":[{"font":{"size":16},"showarrow":false,"text":"Position Weights","x":0.225,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"P&L by Position","x":0.775,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"Position Entry Dates","x":0.225,"xanchor":"center","xref":"paper","y":0.425,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"Risk Contribution","x":0.775,"xanchor":"center","xref":"paper","y":0.425,"yanchor":"bottom","yref":"paper"}],"title":{"text":"Position Analysis Dashboard"},"height":700},                        {"responsive": true}                    )                };                            </script>        </div>
+</body>
+</html>
+                    </div>
+                    
+                    
+                </div>
+                
+                
+                <!-- Insights -->
+                
+                <div class="section">
+                    <h2>💡 Key Insights</h2>
+                    
+                    <div class="alert alert-info">
+                        <strong>Low Diversification</strong> (Diversification)<br>
+                        Portfolio has only 3 positions. Consider adding more diversification.
+                    </div>
+                    
+                </div>
+                
+                
+                <!-- Performance Analysis -->
+                
+                <div class="section">
+                    <h2>📋 Performance Analysis</h2>
+                    <table>
+                        <thead>
+                            <tr><th>Metric</th><th>Value</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Period Return</td>
+                                <td>-5.69%</td>
+                                <td><span class="status-badge status-warning">Negative</span></td>
+                            </tr>
+                            <tr>
+                                <td>Annualized Return</td>
+                                <td>-8.49%</td>
+                                <td><span class="status-badge status-critical">Weak</span></td>
+                            </tr>
+                            <tr>
+                                <td>Volatility</td>
+                                <td>93.58%</td>
+                                <td><span class="status-badge status-critical">High</span></td>
+                            </tr>
+                            <tr>
+                                <td>Sharpe Ratio</td>
+                                <td>-0.09</td>
+                                <td><span class="status-badge status-critical">Poor</span></td>
+                            </tr>
+                            <tr>
+                                <td>Max Drawdown</td>
+                                <td>16.24%</td>
+                                <td><span class="status-badge status-warning">Medium</span></td>
+                            </tr>
+                            <tr>
+                                <td>Win Rate</td>
+                                <td>51.7%</td>
+                                <td><span class="status-badge status-warning">Medium</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                
+                <!-- Position Analysis -->
+                
+                <div class="section">
+                    <h2>🎯 Top Positions</h2>
+                    <table>
+                        <thead>
+                            <tr><th>Symbol</th><th>Shares</th><th>Price</th><th>Market Value</th><th>P&L</th></tr>
+                        </thead>
+                        <tbody>
+                            
+                            <tr>
+                                <td><strong>MSFT</strong></td>
+                                <td>100</td>
+                                <td>$300.00</td>
+                                <td>$30000</td>
+                                <td style="color: #dc3545">
+                                    N/A
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td><strong>AAPL</strong></td>
+                                <td>150</td>
+                                <td>$180.00</td>
+                                <td>$27000</td>
+                                <td style="color: #dc3545">
+                                    N/A
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td><strong>GOOGL</strong></td>
+                                <td>75</td>
+                                <td>$130.00</td>
+                                <td>$9750</td>
+                                <td style="color: #dc3545">
+                                    N/A
+                                </td>
+                            </tr>
+                            
+                        </tbody>
+                    </table>
+                </div>
+                
+                
+                <!-- Risk Analysis -->
+                
+                <div class="section">
+                    <h2>⚠️ Risk Analysis</h2>
+                    <div class="metric-grid">
+                        <div class="metric">
+                            <div class="metric-value">MEDIUM</div>
+                            <div class="metric-label">Current Risk Level</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">0</div>
+                            <div class="metric-label">Active Alerts</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">2.00%</div>
+                            <div class="metric-label">VaR (95%)</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">18.00%</div>
+                            <div class="metric-label">Annual Volatility</div>
+                        </div>
+                    </div>
+                    
+                    
+                </div>
+                
+                
+                <!-- Trading Activity -->
+                
+                
+                <!-- MoE Analysis -->
+                
+                
+                <div class="footer">
+                    <p><strong>Generated by:</strong> Enhanced Report Generator v2.0.0</p>
+                    <p><strong>Report Style:</strong> Professional</p>
+                    <p><strong>Analysis Period:</strong> 30 days</p>
+                    <p><em>This report is for informational purposes only and should not be considered as investment advice.</em></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        

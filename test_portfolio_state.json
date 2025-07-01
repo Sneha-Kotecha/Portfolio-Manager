@@ -1,0 +1,46 @@
+{
+  "timestamp": "2025-06-30T19:50:29.228823",
+  "cash": 1000000,
+  "initial_cash": 1000000,
+  "positions": {},
+  "trade_history": [],
+  "performance_metrics": {
+    "total_return": 0.0,
+    "annualized_return": 0.0,
+    "volatility": 0.0,
+    "sharpe_ratio": 0.0,
+    "max_drawdown": 0.0,
+    "win_rate": 0.0
+  },
+  "risk_metrics": {
+    "var_95": 0.0,
+    "cvar_95": 0.0,
+    "tail_ratio": 0.0,
+    "concentration_risk": 0
+  },
+  "portfolio_summary": {
+    "timestamp": "2025-06-30T19:50:29.229533",
+    "total_value": 1000000,
+    "cash": 1000000,
+    "positions_value": 0,
+    "num_positions": 0,
+    "positions": [],
+    "performance": {
+      "total_return": 0.0,
+      "annualized_return": 0.0,
+      "volatility": 0.0,
+      "sharpe_ratio": 0.0,
+      "max_drawdown": 0.0,
+      "win_rate": 0.0
+    },
+    "risk_metrics": {
+      "var_95": 0.0,
+      "cvar_95": 0.0,
+      "tail_ratio": 0.0,
+      "concentration_risk": 0
+    },
+    "sector_exposures": {},
+    "recent_trades": [],
+    "concentration_risk": 0
+  }
+}
