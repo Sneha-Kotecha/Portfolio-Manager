@@ -17,3 +17,5 @@ kaleido>=0.2.1
 # Machine learning
 torch>=2.0.0
 scikit-learn>=1.2.0
+
+cvxpy
