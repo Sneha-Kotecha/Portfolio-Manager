@@ -821,9 +821,8 @@ class OptionsStrategist:
         except Exception as e:
             return {'error': f'Failed to generate {strategy}: {str(e)}'}
     
-    # Fixed Strategy Implementations
     def _bull_call_spread(self, symbol: str, stock_data: Dict, options_data: Dict,
-                         market_analysis: Dict, portfolio_value: float) -> Dict:
+                        market_analysis: Dict, portfolio_value: float) -> Dict:
         """Fixed Bull Call Spread with better validation"""
         try:
             current_price = stock_data['current_price']
@@ -876,6 +875,9 @@ class OptionsStrategist:
             adjusted_risk = risk_amount * vol_adjustment
             contracts = max(1, min(int(adjusted_risk / (max_loss * 100)), 10))
             
+            # Calculate profit potential percentage
+            profit_potential = (max_profit / max_loss) * 100 if max_loss > 0 else 0
+            
             return {
                 'strategy_name': 'Bull Call Spread',
                 'legs': [
@@ -901,10 +903,10 @@ class OptionsStrategist:
                 'max_loss': round(max_loss * contracts * 100, 2),
                 'breakeven': round(breakeven, 2),
                 'days_to_expiry': options_data['days_to_expiry'],
-                'rationale': f"Downside protection for {symbol}. {round(insurance_percentage, 2)}% insurance cost. Protected below ${put_to_buy['strike']:.2f}"
+                'rationale': f"Bullish strategy for {symbol}. Max profit: ${round(max_profit * contracts * 100, 2)} ({round(profit_potential, 1)}% return) if {symbol} rises above ${sell_call['strike']:.2f} by expiration. Breakeven at ${breakeven:.2f}"
             }
         except Exception as e:
-            return {'error': f'Protective put calculation failed: {str(e)}'}
+            return {'error': f'Bull call spread calculation failed: {str(e)}'}
     
     def _collar(self, symbol: str, stock_data: Dict, options_data: Dict,
                 market_analysis: Dict, portfolio_value: float) -> Dict:
@@ -1411,7 +1413,7 @@ class OptionsStrategist:
             return {'error': f'Cash secured put calculation failed: {str(e)}'}
     
     def _protective_put(self, symbol: str, stock_data: Dict, options_data: Dict,
-                       market_analysis: Dict, portfolio_value: float) -> Dict:
+                    market_analysis: Dict, portfolio_value: float) -> Dict:
         """Fixed Protective Put"""
         try:
             current_price = stock_data['current_price']
@@ -1435,23 +1437,51 @@ class OptionsStrategist:
             max_loss = (current_price - put_to_buy['strike']) * shares_owned + insurance_cost
             insurance_percentage = (insurance_cost / (current_price * shares_owned)) * 100
             
+            # Calculate upside potential (unlimited, but show cost impact)
+            breakeven_price = current_price + put_to_buy['lastPrice']  # Stock needs to rise by premium amount
+            protection_level = (put_to_buy['strike'] / current_price) * 100
+            
+            # Position sizing based on portfolio
+            position_size = min(portfolio_value * 0.1, current_price * shares_owned)  # Max 10% of portfolio
+            actual_shares = int(position_size / current_price)
+            actual_contracts = max(1, actual_shares // 100)  # At least 1 contract
+            actual_shares = actual_contracts * 100  # Adjust to match contracts
+            
+            # Recalculate with actual position size
+            actual_insurance_cost = put_to_buy['lastPrice'] * 100 * actual_contracts
+            actual_protected_value = put_to_buy['strike'] * actual_shares
+            actual_max_loss = (current_price - put_to_buy['strike']) * actual_shares + actual_insurance_cost
+            actual_insurance_percentage = (actual_insurance_cost / (current_price * actual_shares)) * 100
+            
             return {
                 'strategy_name': 'Protective Put',
                 'legs': [
-                    {'action': 'OWN', 'instrument': 'STOCK', 'quantity': shares_owned, 'price': current_price},
-                    {'action': 'BUY', 'option_type': 'PUT', 'strike': put_to_buy['strike'],
-                     'expiration': options_data['expiration'], 'price': put_to_buy['lastPrice'], 'contracts': 1}
+                    {
+                        'action': 'OWN',
+                        'instrument': 'STOCK',
+                        'quantity': actual_shares,
+                        'price': current_price
+                    },
+                    {
+                        'action': 'BUY',
+                        'option_type': 'PUT',
+                        'strike': put_to_buy['strike'],
+                        'expiration': options_data['expiration'],
+                        'price': put_to_buy['lastPrice'],
+                        'contracts': actual_contracts
+                    }
                 ],
-                'insurance_cost': round(insurance_cost, 2),
-                'protected_value': round(protected_value, 2),
-                'max_loss': round(max_loss, 2),
-                'insurance_percentage': round(insurance_percentage, 2),
+                'insurance_cost': round(actual_insurance_cost, 2),
+                'protected_value': round(actual_protected_value, 2),
+                'max_loss': round(actual_max_loss, 2),
+                'insurance_percentage': round(actual_insurance_percentage, 2),
+                'protection_level': round(protection_level, 1),
+                'breakeven_price': round(breakeven_price, 2),
                 'days_to_expiry': options_data['days_to_expiry'],
-                'risk_reward_ratio': round(max_profit / max_loss, 2),
-                'rationale': f"Bullish strategy for {symbol}. Target: ${sell_call['strike']:.2f}. Profit if above ${breakeven:.2f}"
+                'rationale': f"Downside protection for {symbol}. Protected below ${put_to_buy['strike']:.2f} ({protection_level:.1}% of current price). Insurance cost: {actual_insurance_percentage:.1f}% of position value. Stock needs to reach ${breakeven_price:.2f} to overcome premium cost."
             }
         except Exception as e:
-            return {'error': f'Bull call spread calculation failed: {str(e)}'}
+            return {'error': f'Protective put calculation failed: {str(e)}'}
     
     def display_recommendations(self, recommendations: Dict) -> None:
         """Enhanced display with better error handling and data source indicators"""
