@@ -474,7 +474,7 @@ def initialize_session_state():
     api_key = "9ad0d4f85e1a72dd7b3d19b8617b25f9"
     
     # Default symbols if none exist in session state
-    default_symbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+    default_symbols = ['AAPL']
     
     defaults = {
         'data_manager': MarketStackDataManager(api_key) if api_key else None,
