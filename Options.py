@@ -330,8 +330,8 @@ class OptionsStrategist:
                 'hist_data': df,
                 'volume': latest_volume,
                 'avg_volume': df['volume'].mean() if not df['volume'].isna().all() else latest_volume,
-                'high_52w': df['high'].max() if not df['high'].isna().all() else current_price * 1.2,
-                'low_52w': df['low'].min() if not df['low'].isna().all() else current_price * 0.8,
+                'high_52w': df['high'].max(), #if not df['high'].isna().all() else current_price * 1.2,
+                'low_52w': df['low'].min(), #if not df['low'].isna().all() else current_price * 0.8,
                 'market_cap': None,
                 'sector': 'Unknown',
                 'beta': 1.0,
@@ -345,55 +345,55 @@ class OptionsStrategist:
             st.error(f"Error fetching MarketStack data for {symbol}: {str(e)}")
             return self._generate_synthetic_stock_data(symbol)
     
-    def _generate_synthetic_stock_data(self, symbol: str, base_price: float = 100.0) -> Dict:
-        """Generate synthetic stock data when API fails"""
-        # st.info(f"📊 Generating synthetic stock data for {symbol}")
+    # def _generate_synthetic_stock_data(self, symbol: str, base_price: float = 100.0) -> Dict:
+    #     """Generate synthetic stock data when API fails"""
+    #     # st.info(f"📊 Generating synthetic stock data for {symbol}")
         
-        # Use symbol hash to get consistent "random" data
-        import hashlib
-        seed = int(hashlib.md5(symbol.encode()).hexdigest()[:8], 16) % 1000
-        np.random.seed(seed)
+    #     # Use symbol hash to get consistent "random" data
+    #     import hashlib
+    #     seed = int(hashlib.md5(symbol.encode()).hexdigest()[:8], 16) % 1000
+    #     np.random.seed(seed)
         
-        current_price = base_price + np.random.normal(0, 20)
-        current_price = max(10, current_price)  # Minimum $10
+    #     current_price = base_price + np.random.normal(0, 20)
+    #     current_price = max(10, current_price)  # Minimum $10
         
-        return {
-            'symbol': symbol,
-            'current_price': current_price,
-            'sma_20': current_price * (0.95 + np.random.random() * 0.1),
-            'sma_50': current_price * (0.9 + np.random.random() * 0.2),
-            'realized_vol': 0.15 + np.random.random() * 0.3,
-            'rsi': 30 + np.random.random() * 40,
-            'returns': pd.Series(np.random.normal(0.001, 0.02, 20)),
-            'volume': 1000000 + np.random.randint(0, 5000000),
-            'avg_volume': 1200000,
-            'high_52w': current_price * (1.1 + np.random.random() * 0.3),
-            'low_52w': current_price * (0.7 + np.random.random() * 0.2),
-            'market_cap': None,
-            'sector': 'Technology',
-            'beta': 0.8 + np.random.random() * 0.8,
-            'source': 'synthetic'
-        }
+    #     return {
+    #         'symbol': symbol,
+    #         'current_price': current_price,
+    #         'sma_20': current_price * (0.95 + np.random.random() * 0.1),
+    #         'sma_50': current_price * (0.9 + np.random.random() * 0.2),
+    #         'realized_vol': 0.15 + np.random.random() * 0.3,
+    #         'rsi': 30 + np.random.random() * 40,
+    #         'returns': pd.Series(np.random.normal(0.001, 0.02, 20)),
+    #         'volume': 1000000 + np.random.randint(0, 5000000),
+    #         'avg_volume': 1200000,
+    #         'high_52w': current_price * (1.1 + np.random.random() * 0.3),
+    #         'low_52w': current_price * (0.7 + np.random.random() * 0.2),
+    #         'market_cap': None,
+    #         'sector': 'Technology',
+    #         'beta': 0.8 + np.random.random() * 0.8,
+    #         'source': 'synthetic'
+    #     }
     
-    def _generate_basic_stock_data(self, symbol: str, current_price: float, volume: float) -> Dict:
-        """Generate basic stock data with limited info"""
-        return {
-            'symbol': symbol,
-            'current_price': current_price,
-            'sma_20': current_price,
-            'sma_50': current_price,
-            'realized_vol': 0.25,
-            'rsi': 50.0,
-            'returns': pd.Series([0.01] * 20),
-            'volume': volume,
-            'avg_volume': volume,
-            'high_52w': current_price * 1.2,
-            'low_52w': current_price * 0.8,
-            'market_cap': None,
-            'sector': 'Unknown',
-            'beta': 1.0,
-            'source': 'basic'
-        }
+    # def _generate_basic_stock_data(self, symbol: str, current_price: float, volume: float) -> Dict:
+    #     """Generate basic stock data with limited info"""
+    #     return {
+    #         'symbol': symbol,
+    #         'current_price': current_price,
+    #         'sma_20': current_price,
+    #         'sma_50': current_price,
+    #         'realized_vol': 0.25,
+    #         'rsi': 50.0,
+    #         'returns': pd.Series([0.01] * 20),
+    #         'volume': volume,
+    #         'avg_volume': volume,
+    #         'high_52w': current_price * 1.2,
+    #         'low_52w': current_price * 0.8,
+    #         'market_cap': None,
+    #         'sector': 'Unknown',
+    #         'beta': 1.0,
+    #         'source': 'basic'
+    #     }
     
     def _get_polygon_options_data(self, symbol: str) -> Optional[Dict]:
         """Enhanced Polygon options data with better error handling and longer expiry search"""
@@ -754,6 +754,8 @@ class OptionsStrategist:
             'rsi': rsi,
             'realized_vol': realized_vol,
             'volume_ratio': volume_ratio,
+            '52w_high': stock_data['high_52w'],
+            '52w_low': stock_data['low_52w'],
             'price_vs_52w_high': (current_price / stock_data['high_52w']) * 100,
             'price_vs_52w_low': (current_price / stock_data['low_52w']) * 100
         }
@@ -1550,8 +1552,8 @@ class OptionsStrategist:
                     st.metric("Volume", analysis['volume_trend'])
                 
                 with met_col4:
-                    st.metric("52W High", f"{analysis['price_vs_52w_high']:.1f}%")
-                    st.metric("52W Low", f"{analysis['price_vs_52w_low']:.1f}%")
+                    st.metric("52W High", f"{analysis['52w_high']:.1f}") # these values are incorrect 
+                    st.metric("52W Low", f"{analysis['52w_low']:.1f}")
                 
                 # Strategy Details
                 st.subheader(f"💡 Strategy: {trade['strategy_name']}")
