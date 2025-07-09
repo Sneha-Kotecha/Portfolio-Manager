@@ -1680,16 +1680,6 @@ class TrendSurferSystem:
         </div>
         """, unsafe_allow_html=True)
         
-        # Key fixes display
-        st.info("""
-        🔧 **All Fixes Applied:**
-        • ✅ Streamlit compatibility issues resolved (removed unsupported st.dataframe parameters)
-        • ✅ Timezone-aware datetime handling with proper UTC conversion
-        • ✅ Safe datetime arithmetic preventing offset-naive/aware conflicts  
-        • ✅ Enhanced data normalization for yfinance compatibility
-        • ✅ Improved error handling and validation throughout the system
-        • ✅ Alternative trade selection methods for broader Streamlit version support
-        """)
         
         # Render sidebar configuration
         config = self.ui.render_sidebar()
