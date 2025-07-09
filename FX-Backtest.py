@@ -1679,7 +1679,7 @@ class TrendSurferSystem:
         # Enhanced header
         st.markdown("""
         <div class="main-header">
-            <h1>🏄‍♂️ Trend Surfer Strategy /<h1>
+            <h1>🏄‍♂️ Trend Surfer Strategy <h1>
             <p>Kubera.ai</p>
         </div>
         """, unsafe_allow_html=True)
