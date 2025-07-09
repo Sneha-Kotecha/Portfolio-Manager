@@ -943,7 +943,7 @@ class ChartBuilder:
                      annotation_text=f"Target: {trade.take_profit:.5f}")
     
     def _apply_tradingview_styling(self, fig: go.Figure, symbol: str, timeframe: str):
-        """Apply professional TradingView styling"""
+        """Apply professional TradingView styling with weekend exclusion"""
         # Determine price precision
         is_jpy_pair = 'JPY' in symbol
         y_tick_format = '.2f' if is_jpy_pair else '.5f'
@@ -953,13 +953,17 @@ class ChartBuilder:
             plot_bgcolor=self.colors['background'],
             paper_bgcolor=self.colors['background'],
             font_color=self.colors['text'],
-            title=f"{symbol} - {timeframe} Chart",
+            title=f"{symbol} - {timeframe} Chart (Weekdays Only)",
             title_font_size=20,
             xaxis=dict(
                 gridcolor=self.colors['grid'],
                 showgrid=True,
                 rangeslider=dict(visible=False),
-                type='date'
+                type='date',
+                # Exclude weekends from forex charts
+                rangebreaks=[
+                    dict(bounds=["sat", "mon"], pattern="day of week"),
+                ]
             ),
             yaxis=dict(
                 gridcolor=self.colors['grid'],
@@ -1675,11 +1679,10 @@ class TrendSurferSystem:
         # Enhanced header
         st.markdown("""
         <div class="main-header">
-            <h1>🏄‍♂️ Fixed Trend Surfer - Compatibility Fixed</h1>
-            <p>Professional Pin Bar Trading System - All Issues Resolved</p>
+            <h1>🏄‍♂️ Trend Surfer Strategy/h1>
+            <p>Kubera.ai</p>
         </div>
         """, unsafe_allow_html=True)
-        
         
         # Render sidebar configuration
         config = self.ui.render_sidebar()
