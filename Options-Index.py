@@ -1835,55 +1835,6 @@ def main():
             st.error(f"❌ Analysis failed: {result['error']}")
     
     else:
-        # Instructions
-        st.markdown("""
-        ## 🇬🇧 Options - Indices
-        
-        
-        ### 🔍 **Discovery Features:**
-        1. **Find FTSE Indices:** Search for available FTSE indices in Polygon
-        2. **Find UK ETFs:** Discover UK-related ETFs with options
-        3. **Real-time Analysis:** Get actual market data and conditions
-        
-        ### 🔧 **Troubleshooting EWU Data Issues:**
-        
-        **If you're getting "only 3 valid days" error:**
-        
-        1. **Check Data Quality First:**
-           - Click **"Test EWU Data Quality"** in sidebar
-           - This will show exactly what data is available
-        
-        2. **Common Causes:**
-           - **Free API Tier Limits:** Polygon free tier has restrictions
-           - **Weekend/Holiday Data:** Markets closed, less data available  
-           - **API Rate Limits:** Too many requests, data gets filtered
-           - **Data Gaps:** Some ETFs have sporadic data
-        
-        3. **Solutions to Try:**
-           - **Wait and retry:** API limits reset
-           - **Try different ticker:** SPY, QQQ (more liquid)
-           - **Check API status:** Polygon service issues
-        
-        ### 📊 **Alternative Tickers to Try:**
-        - **SPY**: S&P 500 ETF (most liquid options)
-        - **QQQ**: NASDAQ 100 ETF (very active)
-        - **IWM**: Russell 2000 ETF (good volume)
-        - **VGK**: Vanguard Europe ETF (includes UK)
-        
-        **SPY is the most reliable for testing - try it first!**
-        
-        ### 🚀 **Getting Started:**
-        1. ✅ **Enter your Polygon API key** (required)
-        2. ✅ **Use discovery tools** to find available FTSE/UK instruments  
-        3. ✅ **Enter a symbol** (try "EWU" for UK market exposure)
-        4. ✅ **Click Analyze** for real market analysis
-        
-        ### 🎯 **For FTSE Exposure:**
-        - **EWU**: iShares MSCI United Kingdom ETF (direct UK exposure)
-        - **VGK**: Vanguard FTSE Europe ETF (includes UK)
-        - Use discovery tools to find other available instruments
-
-        """)
-
+        st.info("🔍 Enter a ticker symbol and click '🚀 Analyze Real Data' to start analysis")
 if __name__ == "__main__":
     main()
