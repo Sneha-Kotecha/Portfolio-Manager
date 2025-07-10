@@ -1780,7 +1780,7 @@ def main():
                     if real_total > 0:
                         st.success(f"✅ Real Prices: {real_total}/{total} ({real_total/total*100:.0f}%)")
                     else:
-                        st.info("📊 Real Prices: Not available (API plan limits)")
+                        st.info("📊 Using Black Scholes Pricing")
                 
                 with col2:
                     if calc_total > 0:
@@ -1788,9 +1788,9 @@ def main():
                 
                 with col3:
                     if calc_total > 0:
-                        st.write("**Method:** Black-Scholes with volatility skew")
+                        st.write("")
                     else:
-                        st.write("**Source:** Live market data")
+                        st.write("")
             
             # Strategy Recommendations
             st.subheader("💡 Strategy Recommendations")
@@ -1800,7 +1800,7 @@ def main():
             # Note about analysis quality
             pricing = result['options_data'].get('pricing_breakdown', {})
             if pricing.get('total_calculated', 0) > 0:
-                st.info("🧮 **Analysis Note**: Strategy recommendations use professional Black-Scholes pricing models when real-time options prices aren't available due to API plan limits. This provides institutional-quality analysis.")
+                st.info("🧮 **Analysis Note**: Strategy recommendations using Black Scholes with Volatility skew")
             
             st.markdown("**All Strategy Scores:**")
             for strategy, score in result['strategy_scores'].items():
