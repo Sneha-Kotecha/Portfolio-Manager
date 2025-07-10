@@ -21,3 +21,5 @@ scikit-learn>=1.2.0
 cvxpy
 
 yfinance>=0.2.0
+
+polygon-api-client>=1.0.0
