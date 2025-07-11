@@ -252,7 +252,7 @@ class PolygonRealDataStrategist:
             # Create subplot with secondary y-axis for volume
             fig = make_subplots(
                 rows=2, cols=1,
-                shared_xaxis=True,
+                shared_xaxes=True,
                 vertical_spacing=0.1,
                 subplot_titles=(f'{data["ticker"]} - Weekday Trading (Last Year)', 'Volume'),
                 row_heights=[0.7, 0.3]
@@ -344,6 +344,8 @@ class PolygonRealDataStrategist:
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, showarrow=False
             )
+    
+    def check_options_availability(self, ticker: str) -> Dict:
         """Check if a ticker has options available"""
         try:
             st.info(f"🎯 Checking options availability for {ticker}...")
@@ -1262,6 +1264,299 @@ class PolygonRealDataStrategist:
         # Return top 5 strategies
         return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True)[:5])
     
+    def get_options_greeks(self, ticker: str, current_price: float = None) -> Dict:
+        """Get options Greeks data from Polygon API"""
+        try:
+            print(f"🔢 Fetching options Greeks for {ticker}...")
+            
+            # Get options contracts first
+            contracts = []
+            for contract in self.client.list_options_contracts(
+                underlying_ticker=ticker,
+                expiration_date_gte=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
+                expiration_date_lte=(datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"),
+                limit=500
+            ):
+                contracts.append(contract)
+            
+            if not contracts:
+                raise ValueError(f"No options contracts found for {ticker}")
+            
+            print(f"Found {len(contracts)} options contracts for Greeks analysis")
+            
+            # Get current underlying price if not provided
+            if current_price is None:
+                try:
+                    end_date = datetime.now()
+                    start_date = end_date - timedelta(days=5)
+                    
+                    recent_aggs = []
+                    for agg in self.client.list_aggs(
+                        ticker,
+                        1,
+                        "day",
+                        start_date.strftime("%Y-%m-%d"),
+                        end_date.strftime("%Y-%m-%d"),
+                        limit=5
+                    ):
+                        if hasattr(agg, 'close') and agg.close is not None:
+                            recent_aggs.append(agg)
+                    
+                    if recent_aggs:
+                        current_price = float(recent_aggs[-1].close)
+                    else:
+                        raise ValueError("Could not get current price")
+                        
+                except Exception as e:
+                    raise ValueError(f"Could not get current price for {ticker}: {e}")
+            
+            # Process contracts and calculate/fetch Greeks
+            greeks_data = self._process_options_greeks(contracts, current_price, ticker)
+            
+            return greeks_data
+            
+        except Exception as e:
+            print(f"❌ Failed to get Greeks for {ticker}: {str(e)}")
+            raise
+    
+    def _process_options_greeks(self, contracts: List, current_price: float, underlying_ticker: str) -> Dict:
+        """Process options contracts and calculate Greeks"""
+        
+        # Group by expiration and filter
+        exp_groups = {}
+        today = datetime.now().date()
+        
+        for contract in contracts:
+            try:
+                exp_date = contract.expiration_date
+                exp_date_obj = datetime.strptime(exp_date, '%Y-%m-%d').date()
+                
+                if exp_date_obj <= today:
+                    continue
+                
+                strike = float(contract.strike_price)
+                
+                # Filter strikes within reasonable range (±30%)
+                if abs(strike - current_price) / current_price > 0.30:
+                    continue
+                
+                if exp_date not in exp_groups:
+                    exp_groups[exp_date] = {'calls': [], 'puts': []}
+                
+                contract_data = {
+                    'ticker': contract.ticker,
+                    'strike': strike,
+                    'contract_type': contract.contract_type,
+                    'expiration_date': exp_date
+                }
+                
+                if contract.contract_type == 'call':
+                    exp_groups[exp_date]['calls'].append(contract_data)
+                elif contract.contract_type == 'put':
+                    exp_groups[exp_date]['puts'].append(contract_data)
+                    
+            except Exception as e:
+                continue
+        
+        if not exp_groups:
+            raise ValueError("No valid option contracts found for Greeks analysis")
+        
+        # Find best expiration for Greeks analysis (prefer 30-45 days)
+        best_exp = None
+        best_score = 0
+        
+        for exp_date in sorted(exp_groups.keys()):
+            calls_count = len(exp_groups[exp_date]['calls'])
+            puts_count = len(exp_groups[exp_date]['puts'])
+            
+            if calls_count >= 3 and puts_count >= 3:
+                exp_datetime = datetime.strptime(exp_date, '%Y-%m-%d')
+                days_to_exp = (exp_datetime.date() - today).days
+                
+                if 14 <= days_to_exp <= 60:
+                    time_score = 100 - abs(30 - days_to_exp)
+                    option_score = min(calls_count + puts_count, 100)
+                    total_score = time_score + option_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_exp = exp_date
+        
+        if not best_exp:
+            # Fallback to any viable expiration
+            for exp_date in sorted(exp_groups.keys()):
+                calls_count = len(exp_groups[exp_date]['calls'])
+                puts_count = len(exp_groups[exp_date]['puts'])
+                if calls_count >= 3 and puts_count >= 3:
+                    best_exp = exp_date
+                    break
+        
+        if not best_exp:
+            raise ValueError("No expiration found with sufficient options for Greeks analysis")
+        
+        # Calculate Greeks for the best expiration
+        calls_greeks = self._calculate_option_greeks(exp_groups[best_exp]['calls'], current_price, 'call')
+        puts_greeks = self._calculate_option_greeks(exp_groups[best_exp]['puts'], current_price, 'put')
+        
+        # Combine results
+        all_greeks = calls_greeks + puts_greeks
+        
+        # Create summary statistics
+        summary_stats = self._calculate_greeks_summary(all_greeks, current_price)
+        
+        exp_date_obj = datetime.strptime(best_exp, '%Y-%m-%d')
+        days_to_expiry = (exp_date_obj.date() - today).days
+        
+        return {
+            'expiration': best_exp,
+            'days_to_expiry': days_to_expiry,
+            'underlying_price': current_price,
+            'underlying_ticker': underlying_ticker,
+            'calls_greeks': pd.DataFrame(calls_greeks),
+            'puts_greeks': pd.DataFrame(puts_greeks),
+            'all_greeks': pd.DataFrame(all_greeks),
+            'summary_stats': summary_stats,
+            'total_contracts': len(all_greeks)
+        }
+    
+    def _calculate_option_greeks(self, contracts: List[Dict], underlying_price: float, option_type: str) -> List[Dict]:
+        """Calculate Greeks for option contracts"""
+        greeks_data = []
+        
+        # Risk-free rate (approximate)
+        r = 0.05
+        # Base volatility estimate
+        vol = 0.25
+        
+        for contract in contracts:
+            try:
+                strike = contract['strike']
+                expiration = contract['expiration_date']
+                
+                # Calculate time to expiration
+                exp_datetime = datetime.strptime(expiration, '%Y-%m-%d')
+                T = max((exp_datetime - datetime.now()).days / 365.0, 0.01)
+                
+                # Adjust volatility based on moneyness
+                moneyness = strike / underlying_price
+                if option_type == 'put' and moneyness > 1.0:
+                    vol_adj = vol * (1 + (moneyness - 1) * 0.3)
+                elif option_type == 'call' and moneyness < 1.0:
+                    vol_adj = vol * (1 + (1 - moneyness) * 0.2)
+                else:
+                    vol_adj = vol
+                
+                # Calculate Greeks using Black-Scholes
+                greeks = self._black_scholes_greeks(underlying_price, strike, T, r, vol_adj, option_type)
+                
+                # Add contract information
+                greeks.update({
+                    'ticker': contract['ticker'],
+                    'strike': strike,
+                    'expiration': expiration,
+                    'contract_type': option_type,
+                    'moneyness': round(moneyness, 3),
+                    'time_to_expiry': round(T, 3),
+                    'implied_vol': round(vol_adj, 3)
+                })
+                
+                greeks_data.append(greeks)
+                
+            except Exception as e:
+                self.logger.warning(f"Error calculating Greeks for {contract.get('ticker', 'unknown')}: {e}")
+                continue
+        
+        return greeks_data
+    
+    def _black_scholes_greeks(self, S: float, K: float, T: float, r: float, sigma: float, option_type: str) -> Dict:
+        """Calculate Black-Scholes Greeks"""
+        try:
+            import math
+            from scipy.stats import norm
+            
+            # Calculate d1 and d2
+            d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
+            d2 = d1 - sigma * math.sqrt(T)
+            
+            # Calculate Greeks
+            if option_type.lower() == 'call':
+                # Call option Greeks
+                delta = norm.cdf(d1)
+                theta = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) 
+                        - r * K * math.exp(-r * T) * norm.cdf(d2)) / 365
+                rho = K * T * math.exp(-r * T) * norm.cdf(d2) / 100
+            else:
+                # Put option Greeks
+                delta = norm.cdf(d1) - 1
+                theta = (-(S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) 
+                        + r * K * math.exp(-r * T) * norm.cdf(-d2)) / 365
+                rho = -K * T * math.exp(-r * T) * norm.cdf(-d2) / 100
+            
+            # Common Greeks for both calls and puts
+            gamma = norm.pdf(d1) / (S * sigma * math.sqrt(T))
+            vega = S * norm.pdf(d1) * math.sqrt(T) / 100
+            
+            # Calculate option price
+            if option_type.lower() == 'call':
+                price = S * norm.cdf(d1) - K * math.exp(-r * T) * norm.cdf(d2)
+            else:
+                price = K * math.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
+            
+            return {
+                'price': round(max(0.01, price), 2),
+                'delta': round(delta, 4),
+                'gamma': round(gamma, 4),
+                'theta': round(theta, 4),
+                'vega': round(vega, 4),
+                'rho': round(rho, 4)
+            }
+            
+        except Exception as e:
+            self.logger.warning(f"Greeks calculation error: {e}")
+            return {
+                'price': 0.01,
+                'delta': 0.0,
+                'gamma': 0.0,
+                'theta': 0.0,
+                'vega': 0.0,
+                'rho': 0.0
+            }
+    
+    def _calculate_greeks_summary(self, all_greeks: List[Dict], underlying_price: float) -> Dict:
+        """Calculate summary statistics for Greeks"""
+        if not all_greeks:
+            return {}
+        
+        df = pd.DataFrame(all_greeks)
+        
+        # ATM options (within 2% of current price)
+        atm_mask = abs(df['strike'] - underlying_price) / underlying_price <= 0.02
+        atm_options = df[atm_mask]
+        
+        # OTM calls and puts
+        otm_calls = df[(df['contract_type'] == 'call') & (df['strike'] > underlying_price)]
+        otm_puts = df[(df['contract_type'] == 'put') & (df['strike'] < underlying_price)]
+        
+        summary = {
+            'total_options': len(df),
+            'atm_options': len(atm_options),
+            'otm_calls': len(otm_calls),
+            'otm_puts': len(otm_puts),
+            'avg_delta_calls': df[df['contract_type'] == 'call']['delta'].mean() if len(df[df['contract_type'] == 'call']) > 0 else 0,
+            'avg_delta_puts': df[df['contract_type'] == 'put']['delta'].mean() if len(df[df['contract_type'] == 'put']) > 0 else 0,
+            'max_gamma': df['gamma'].max(),
+            'avg_theta': df['theta'].mean(),
+            'avg_vega': df['vega'].mean(),
+            'highest_gamma_strike': df.loc[df['gamma'].idxmax(), 'strike'] if len(df) > 0 else 0
+        }
+        
+        # Round values
+        for key, value in summary.items():
+            if isinstance(value, float):
+                summary[key] = round(value, 4)
+        
+        return summary
+
     def analyze_symbol(self, ticker: str, debug: bool = False) -> Dict:
         """Analyze a single symbol with real data only and detailed error reporting"""
         try:
@@ -1576,6 +1871,15 @@ def main():
     
     st.title("🇬🇧 Indices Options Strategist")
     
+    # Initialize session state for storing analysis results
+    if 'analysis_result' not in st.session_state:
+        st.session_state.analysis_result = None
+    if 'greeks_result' not in st.session_state:
+        st.session_state.greeks_result = None
+    
+    # Create tabs
+    tab1, tab2, tab3 = st.tabs(["📊 Analysis", "📚 Strategy Guide", "🔢 Options Greeks"])
+    
     # Sidebar
     with st.sidebar:
         st.header("🔑 Configuration")
@@ -1707,134 +2011,586 @@ def main():
             disabled=not symbol_input
         )
     
-    # Main content
-    if analyze_button and symbol_input:
-        with st.spinner(f"Analyzing {symbol_input} with real data..."):
-            result = strategist.analyze_symbol(symbol_input.upper(), debug=debug_mode)
-        
-        if result['success']:
-            # Display results
-            st.success(f"✅ Real data analysis complete for {result['ticker']}")
+    # Tab 1: Analysis
+    with tab1:
+        if analyze_button and symbol_input:
+            with st.spinner(f"Analyzing {symbol_input} with real data..."):
+                result = strategist.analyze_symbol(symbol_input.upper(), debug=debug_mode)
             
-            # Market Data Summary
-            st.subheader("📊 Market Data Summary")
-            underlying = result['underlying_data']
-            analysis = result['market_analysis']
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Current Price", f"${underlying['current_price']:.2f}")
-                st.metric("1-Day Change", f"{analysis['price_change_1d']:.2f}%")
-            with col2:
-                st.metric("RSI", f"{analysis['rsi']:.1f}")
-                st.metric("5-Day Change", f"{analysis['price_change_5d']:.2f}%")
-            with col3:
-                st.metric("Realized Vol (21d)", f"{analysis['realized_vol']:.1%}")
-                st.metric("20-Day Change", f"{analysis['price_change_20d']:.2f}%")
-            with col4:
-                st.metric("Data Points", underlying['data_points'])
-                st.metric("Volume vs Avg", f"{analysis['volume_vs_avg']:.2f}x")
-            
-            # Market Analysis
-            st.subheader("📈 Market Analysis")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                trend_color = "🟢" if "BULLISH" in analysis['trend'] else "🔴" if "BEARISH" in analysis['trend'] else "🟡"
-                st.metric("Trend", f"{trend_color} {analysis['trend']}")
-                st.metric("Trend Strength", f"{analysis['trend_strength']:.2f}")
-            
-            with col2:
-                vol_color = "🔴" if analysis['volatility_regime'] in ['HIGH_VOL', 'EXTREME_VOL'] else "🟢"
-                st.metric("Volatility", f"{vol_color} {analysis['volatility_regime']}")
-                st.metric("BB Position", f"{analysis['bb_position']:.1f}%")
-            
-            with col3:
-                momentum_color = "🔴" if "OVERBOUGHT" in analysis['momentum'] else "🟢" if "OVERSOLD" in analysis['momentum'] else "🟡"
-                st.metric("Momentum", f"{momentum_color} {analysis['momentum']}")
-                st.metric("BB Signal", analysis['bb_signal'])
-            
-            # Options Data Summary
-            st.subheader("🎯 Options Data Summary")
-            options = result['options_data']
-            pricing = options.get('pricing_breakdown', {})
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Expiration", options['expiration'])
-            with col2:
-                st.metric("Available Calls", len(options['calls']))
-            with col3:
-                st.metric("Available Puts", len(options['puts']))
-            with col4:
-                st.metric("Days to Expiry", options['days_to_expiry'])
-            
-            # Pricing breakdown
-            if pricing:
-                st.markdown("**📊 Options Pricing Sources:**")
-                col1, col2, col3 = st.columns(3)
+            if result['success']:
+                # Store result in session state
+                st.session_state.analysis_result = result
+                
+                # Display results
+                st.success(f"✅ Real data analysis complete for {result['ticker']}")
+                
+                # Market Data Summary
+                st.subheader("📊 Market Data Summary")
+                underlying = result['underlying_data']
+                analysis = result['market_analysis']
+                
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    real_total = pricing.get('total_real', 0)
-                    calc_total = pricing.get('total_calculated', 0)
-                    total = real_total + calc_total
-                    if real_total > 0:
-                        st.success(f"✅ Real Prices: {real_total}/{total} ({real_total/total*100:.0f}%)")
-                    else:
-                        st.info("📊 Using Black Scholes Pricing")
+                    st.metric("Current Price", f"${underlying['current_price']:.2f}")
+                    st.metric("1-Day Change", f"{analysis['price_change_1d']:.2f}%")
+                with col2:
+                    st.metric("RSI", f"{analysis['rsi']:.1f}")
+                    st.metric("5-Day Change", f"{analysis['price_change_5d']:.2f}%")
+                with col3:
+                    st.metric("Realized Vol (21d)", f"{analysis['realized_vol']:.1%}")
+                    st.metric("20-Day Change", f"{analysis['price_change_20d']:.2f}%")
+                with col4:
+                    st.metric("Data Points", underlying['data_points'])
+                    st.metric("Volume vs Avg", f"{analysis['volume_vs_avg']:.2f}x")
+                
+                # Trading Chart
+                st.subheader("📈 Last Year Trading Chart")
+                try:
+                    # Ensure we have the required data structure
+                    chart_data = {
+                        'ticker': underlying['ticker'],
+                        'current_price': underlying['current_price'],
+                        'historical_data': underlying['historical_data'],
+                        'name': f"{underlying['ticker']} Stock/ETF"
+                    }
+                    chart = strategist.create_trading_chart(chart_data)
+                    st.plotly_chart(chart, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Could not create chart: {str(e)}")
+                    st.info("Chart generation failed, but analysis data is still available below.")
+                    # Debug info
+                    if debug_mode:
+                        st.write("**Chart Debug Info:**")
+                        st.write(f"- Historical data shape: {underlying.get('historical_data', pd.DataFrame()).shape}")
+                        st.write(f"- Data columns: {list(underlying.get('historical_data', pd.DataFrame()).columns)}")
+                        st.write(f"- Current price: {underlying.get('current_price', 'N/A')}")
+                
+                
+                # Market Analysis
+                st.subheader("📈 Market Analysis")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    trend_color = "🟢" if "BULLISH" in analysis['trend'] else "🔴" if "BEARISH" in analysis['trend'] else "🟡"
+                    st.metric("Trend", f"{trend_color} {analysis['trend']}")
+                    st.metric("Trend Strength", f"{analysis['trend_strength']:.2f}")
                 
                 with col2:
-                    if calc_total > 0:
-                        st.info(f"🧮 Calculated: {calc_total}/{total} ({calc_total/total*100:.0f}%)")
+                    vol_color = "🔴" if analysis['volatility_regime'] in ['HIGH_VOL', 'EXTREME_VOL'] else "🟢"
+                    st.metric("Volatility", f"{vol_color} {analysis['volatility_regime']}")
+                    st.metric("BB Position", f"{analysis['bb_position']:.1f}%")
                 
                 with col3:
-                    if calc_total > 0:
-                        st.write("")
-                    else:
-                        st.write("")
-            
-            # Strategy Recommendations
-            st.subheader("💡 Strategy Recommendations")
-            
-            st.success(f"**Best Strategy:** {result['best_strategy']} (Confidence: {result['confidence']:.1f}/10)")
-            
-            # Note about analysis quality
-            pricing = result['options_data'].get('pricing_breakdown', {})
-            if pricing.get('total_calculated', 0) > 0:
-                st.info("🧮 **Analysis Note**: Strategy recommendations using Black Scholes with Volatility skew")
-            
-            st.markdown("**All Strategy Scores:**")
-            for strategy, score in result['strategy_scores'].items():
-                st.write(f"• **{strategy}:** {score:.1f}/10")
-            
-            # Export data
-            st.subheader("📤 Export Real Data")
-            
-            export_data = {
-                'analysis_timestamp': datetime.now().isoformat(),
-                'ticker': result['ticker'],
-                'market_analysis': result['market_analysis'],
-                'strategy_scores': result['strategy_scores'],
-                'best_strategy': result['best_strategy'],
-                'confidence': result['confidence'],
-                'options_summary': {
-                    'expiration': options['expiration'],
-                    'calls_count': len(options['calls']),
-                    'puts_count': len(options['puts']),
-                    'days_to_expiry': options['days_to_expiry']
+                    momentum_color = "🔴" if "OVERBOUGHT" in analysis['momentum'] else "🟢" if "OVERSOLD" in analysis['momentum'] else "🟡"
+                    st.metric("Momentum", f"{momentum_color} {analysis['momentum']}")
+                    st.metric("BB Signal", analysis['bb_signal'])
+                
+                # Options Data Summary
+                st.subheader("🎯 Options Data Summary")
+                options = result['options_data']
+                pricing = options.get('pricing_breakdown', {})
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Expiration", options['expiration'])
+                with col2:
+                    st.metric("Available Calls", len(options['calls']))
+                with col3:
+                    st.metric("Available Puts", len(options['puts']))
+                with col4:
+                    st.metric("Days to Expiry", options['days_to_expiry'])
+                
+                # Pricing breakdown
+                if pricing:
+                    st.markdown("**📊 Options Pricing Sources:**")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        real_total = pricing.get('total_real', 0)
+                        calc_total = pricing.get('total_calculated', 0)
+                        total = real_total + calc_total
+                        if real_total > 0:
+                            st.success(f"✅ Real Prices: {real_total}/{total} ({real_total/total*100:.0f}%)")
+                        else:
+                            st.info("📊 Real Prices: Not available (API plan limits)")
+                    
+                    with col2:
+                        if calc_total > 0:
+                            st.info(f"🧮 Calculated: {calc_total}/{total} ({calc_total/total*100:.0f}%)")
+                    
+                    with col3:
+                        if calc_total > 0:
+                            st.write("**Method:** Black-Scholes with volatility skew")
+                        else:
+                            st.write("**Source:** Live market data")
+                
+                # Strategy Recommendations
+                st.subheader("💡 Strategy Recommendations")
+                
+                st.success(f"**Best Strategy:** {result['best_strategy']} (Confidence: {result['confidence']:.1f}/10)")
+                
+                # Note about analysis quality
+                pricing = result['options_data'].get('pricing_breakdown', {})
+                if pricing.get('total_calculated', 0) > 0:
+                    st.info("🧮 **Analysis Note**: Strategy recommendations use professional Black-Scholes pricing models when real-time options prices aren't available due to API plan limits. This provides institutional-quality analysis.")
+                
+                st.markdown("**All Strategy Scores:**")
+                for strategy, score in result['strategy_scores'].items():
+                    st.write(f"• **{strategy}:** {score:.1f}/10")
+                
+                # Export data
+                st.subheader("📤 Export Real Data")
+                
+                export_data = {
+                    'analysis_timestamp': datetime.now().isoformat(),
+                    'ticker': result['ticker'],
+                    'market_analysis': result['market_analysis'],
+                    'strategy_scores': result['strategy_scores'],
+                    'best_strategy': result['best_strategy'],
+                    'confidence': result['confidence'],
+                    'options_summary': {
+                        'expiration': options['expiration'],
+                        'calls_count': len(options['calls']),
+                        'puts_count': len(options['puts']),
+                        'days_to_expiry': options['days_to_expiry']
+                    }
                 }
-            }
+                
+                st.download_button(
+                    "📋 Download Analysis JSON",
+                    json.dumps(export_data, indent=2),
+                    f"{result['ticker']}_real_analysis.json",
+                    "application/json"
+                )
             
-            st.download_button(
-                "📋 Download Analysis JSON",
-                json.dumps(export_data, indent=2),
-                f"{result['ticker']}_real_analysis.json",
-                "application/json"
-            )
+            else:
+                st.error(f"❌ Analysis failed: {result['error']}")
         
         else:
-            st.error(f"❌ Analysis failed: {result['error']}")
+            # Instructions for Analysis tab
+            st.markdown("""
+            ## 🇬🇧 Options - Indices Analysis
+            
+            ### 🔍 **Discovery Features:**
+            1. **Find FTSE Indices:** Search for available FTSE indices in Polygon
+            2. **Find UK ETFs:** Discover UK-related ETFs with options
+            3. **Real-time Analysis:** Get actual market data and conditions
+            4. **Trading Charts:** Visual analysis with candlesticks and moving averages
+            
+            ### 🔧 **Troubleshooting EWU Data Issues:**
+            
+            **If you're getting "only 3 valid days" error:**
+            
+            1. **Check Data Quality First:**
+               - Click **"Test EWU Data Quality"** in sidebar
+               - This will show exactly what data is available
+            
+            2. **Common Causes:**
+               - **Free API Tier Limits:** Polygon free tier has restrictions
+               - **Weekend/Holiday Data:** Markets closed, less data available  
+               - **API Rate Limits:** Too many requests, data gets filtered
+               - **Data Gaps:** Some ETFs have sporadic data
+            
+            3. **Solutions to Try:**
+               - **Wait and retry:** API limits reset
+               - **Try different ticker:** SPY, QQQ (more liquid)
+               - **Check API status:** Polygon service issues
+            
+            ### 📊 **Alternative Tickers to Try:**
+            - **SPY**: S&P 500 ETF (most liquid options)
+            - **QQQ**: NASDAQ 100 ETF (very active)
+            - **IWM**: Russell 2000 ETF (good volume)
+            - **VGK**: Vanguard Europe ETF (includes UK)
+            
+            **SPY is the most reliable for testing - try it first!**
+            
+            ### 🚀 **Getting Started:**
+            1. ✅ **Enter your Polygon API key** (required)
+            2. ✅ **Use discovery tools** to find available FTSE/UK instruments  
+            3. ✅ **Enter a symbol** (try "EWU" for UK market exposure)
+            4. ✅ **Click Analyze** for real market analysis with charts
+            
+            ### 🎯 **For FTSE Exposure:**
+            - **EWU**: iShares MSCI United Kingdom ETF (direct UK exposure)
+            - **VGK**: Vanguard FTSE Europe ETF (includes UK)
+            - Use discovery tools to find other available instruments
+            """)
     
-    else:
-        st.info("🔍 Enter a ticker symbol and click '🚀 Analyze Real Data' to start analysis")
+    # Tab 2: Strategy Guide
+    with tab2:
+        st.header("📚 Options Strategy Guide")
+        
+        st.markdown("""
+        This comprehensive guide covers all the option strategies analyzed by our system. 
+        Each strategy is explained with market conditions, risk/reward profiles, and practical examples.
+        """)
+        
+        # Get strategy explanations
+        strategies = get_strategy_explanations()
+        
+        # Create expandable sections for each strategy
+        for strategy_key, strategy_info in strategies.items():
+            with st.expander(f"📋 {strategy_info['name']}", expanded=False):
+                
+                # Strategy header
+                st.markdown(f"**{strategy_info['description']}**")
+                
+                # Market outlook
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### 📊 Strategy Overview")
+                    st.markdown(f"**Market Outlook:** {strategy_info['market_outlook']}")
+                    st.markdown(f"**Max Profit:** {strategy_info['max_profit']}")
+                    st.markdown(f"**Max Loss:** {strategy_info['max_loss']}")
+                    st.markdown(f"**Breakeven:** {strategy_info['breakeven']}")
+                
+                with col2:
+                    st.markdown("### 💡 When to Use")
+                    for condition in strategy_info['when_to_use']:
+                        st.markdown(f"• {condition}")
+                
+                # Pros and Cons
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("### ✅ Pros")
+                    for pro in strategy_info['pros']:
+                        st.markdown(f"• {pro}")
+                
+                with col2:
+                    st.markdown("### ❌ Cons")
+                    for con in strategy_info['cons']:
+                        st.markdown(f"• {con}")
+                
+                # Example
+                st.markdown("### 📝 Example")
+                st.info(strategy_info['example'])
+                
+                st.markdown("---")
+        
+        # Additional resources
+        st.markdown("## 📚 Additional Resources")
+        
+        st.markdown("""
+        ### Risk Management Tips:
+        - **Never risk more than you can afford to lose**
+        - **Start with paper trading to practice strategies**
+        - **Understand assignment risk with short options**
+        - **Monitor positions regularly, especially near expiration**
+        - **Have exit strategies planned before entering trades**
+        
+        ### Market Conditions Guide:
+        - **Bullish Market:** Bull call spreads, covered calls, cash-secured puts
+        - **Bearish Market:** Bear put spreads, protective puts
+        - **Sideways Market:** Iron condors, covered calls, cash-secured puts
+        - **High Volatility:** Short premium strategies (covered calls, cash-secured puts)
+        - **Low Volatility:** Long volatility strategies (straddles, protective puts)
+        
+        ### Key Metrics to Monitor:
+        - **Delta:** Price sensitivity to underlying movement
+        - **Gamma:** Rate of change of delta
+        - **Theta:** Time decay effect
+        - **Vega:** Volatility sensitivity
+        - **Implied Volatility:** Market's expectation of future volatility
+        """)
+    
+    # Tab 3: Options Greeks
+    with tab3:
+        st.header("🔢 Options Greeks Analysis")
+        
+        # Input section
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Auto-populate with symbol from analysis tab if available
+            default_symbol = "EWU"
+            if st.session_state.analysis_result and st.session_state.analysis_result.get('success'):
+                default_symbol = st.session_state.analysis_result['ticker']
+            
+            greeks_symbol = st.text_input(
+                "Symbol for Greeks Analysis",
+                value=default_symbol,
+                help="Enter ticker symbol to analyze options Greeks"
+            )
+        
+        with col2:
+            get_greeks_button = st.button(
+                "📊 Get Greeks Data",
+                type="primary",
+                disabled=not greeks_symbol or not polygon_key
+            )
+        
+        if get_greeks_button and greeks_symbol:
+            with st.spinner(f"Fetching Options Greeks for {greeks_symbol}..."):
+                try:
+                    greeks_result = strategist.get_options_greeks(greeks_symbol.upper())
+                    
+                    # Store result in session state
+                    st.session_state.greeks_result = greeks_result
+                    
+                    st.success(f"✅ Greeks analysis complete for {greeks_result['underlying_ticker']}")
+                    
+                    # Show connection to analysis tab if same symbol
+                    if (st.session_state.analysis_result and 
+                        st.session_state.analysis_result.get('success') and
+                        st.session_state.analysis_result['ticker'] == greeks_result['underlying_ticker']):
+                        st.info("🔗 This Greeks analysis matches your symbol from the Analysis tab!")
+                    
+                    # Summary metrics
+                    st.subheader("📊 Greeks Summary")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("Underlying Price", f"${greeks_result['underlying_price']:.2f}")
+                        st.metric("Total Contracts", greeks_result['total_contracts'])
+                    
+                    with col2:
+                        st.metric("Expiration", greeks_result['expiration'])
+                        st.metric("Days to Expiry", greeks_result['days_to_expiry'])
+                    
+                    with col3:
+                        st.metric("ATM Options", greeks_result['summary_stats'].get('atm_options', 0))
+                        st.metric("OTM Calls", greeks_result['summary_stats'].get('otm_calls', 0))
+                    
+                    with col4:
+                        st.metric("OTM Puts", greeks_result['summary_stats'].get('otm_puts', 0))
+                        max_gamma_strike = greeks_result['summary_stats'].get('highest_gamma_strike', 0)
+                        st.metric("Max Gamma Strike", f"${max_gamma_strike:.2f}")
+                    
+                    # Greeks Tables
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.subheader("📞 Call Options Greeks")
+                        calls_df = greeks_result['calls_greeks'].copy()
+                        if not calls_df.empty:
+                            # Select and format columns for display
+                            display_calls = calls_df[['strike', 'price', 'delta', 'gamma', 'theta', 'vega', 'moneyness']].copy()
+                            display_calls = display_calls.sort_values('strike')
+                            
+                            # Format columns
+                            display_calls['price'] = display_calls['price'].apply(lambda x: f"${x:.2f}")
+                            display_calls['strike'] = display_calls['strike'].apply(lambda x: f"${x:.2f}")
+                            display_calls['moneyness'] = display_calls['moneyness'].apply(lambda x: f"{x:.3f}")
+                            
+                            st.dataframe(display_calls, use_container_width=True)
+                        else:
+                            st.info("No call options data available")
+                    
+                    with col2:
+                        st.subheader("📱 Put Options Greeks")
+                        puts_df = greeks_result['puts_greeks'].copy()
+                        if not puts_df.empty:
+                            # Select and format columns for display
+                            display_puts = puts_df[['strike', 'price', 'delta', 'gamma', 'theta', 'vega', 'moneyness']].copy()
+                            display_puts = display_puts.sort_values('strike', ascending=False)
+                            
+                            # Format columns
+                            display_puts['price'] = display_puts['price'].apply(lambda x: f"${x:.2f}")
+                            display_puts['strike'] = display_puts['strike'].apply(lambda x: f"${x:.2f}")
+                            display_puts['moneyness'] = display_puts['moneyness'].apply(lambda x: f"{x:.3f}")
+                            
+                            st.dataframe(display_puts, use_container_width=True)
+                        else:
+                            st.info("No put options data available")
+                    
+                    # Greeks Visualization
+                    st.subheader("📈 Greeks Visualization")
+                    
+                    all_greeks_df = greeks_result['all_greeks']
+                    
+                    if not all_greeks_df.empty:
+                        # Create visualizations
+                        fig = make_subplots(
+                            rows=2, cols=2,
+                            subplot_titles=('Delta by Strike', 'Gamma by Strike', 'Theta by Strike', 'Vega by Strike'),
+                            vertical_spacing=0.12,
+                            horizontal_spacing=0.1
+                        )
+                        
+                        # Separate calls and puts
+                        calls_data = all_greeks_df[all_greeks_df['contract_type'] == 'call'].sort_values('strike')
+                        puts_data = all_greeks_df[all_greeks_df['contract_type'] == 'put'].sort_values('strike')
+                        
+                        # Delta plot
+                        if not calls_data.empty:
+                            fig.add_trace(go.Scatter(x=calls_data['strike'], y=calls_data['delta'], 
+                                                   mode='lines+markers', name='Calls Delta', 
+                                                   line=dict(color='green')), row=1, col=1)
+                        if not puts_data.empty:
+                            fig.add_trace(go.Scatter(x=puts_data['strike'], y=puts_data['delta'], 
+                                                   mode='lines+markers', name='Puts Delta', 
+                                                   line=dict(color='red')), row=1, col=1)
+                        
+                        # Gamma plot
+                        if not calls_data.empty:
+                            fig.add_trace(go.Scatter(x=calls_data['strike'], y=calls_data['gamma'], 
+                                                   mode='lines+markers', name='Calls Gamma', 
+                                                   line=dict(color='green'), showlegend=False), row=1, col=2)
+                        if not puts_data.empty:
+                            fig.add_trace(go.Scatter(x=puts_data['strike'], y=puts_data['gamma'], 
+                                                   mode='lines+markers', name='Puts Gamma', 
+                                                   line=dict(color='red'), showlegend=False), row=1, col=2)
+                        
+                        # Theta plot
+                        if not calls_data.empty:
+                            fig.add_trace(go.Scatter(x=calls_data['strike'], y=calls_data['theta'], 
+                                                   mode='lines+markers', name='Calls Theta', 
+                                                   line=dict(color='green'), showlegend=False), row=2, col=1)
+                        if not puts_data.empty:
+                            fig.add_trace(go.Scatter(x=puts_data['strike'], y=puts_data['theta'], 
+                                                   mode='lines+markers', name='Puts Theta', 
+                                                   line=dict(color='red'), showlegend=False), row=2, col=1)
+                        
+                        # Vega plot
+                        if not calls_data.empty:
+                            fig.add_trace(go.Scatter(x=calls_data['strike'], y=calls_data['vega'], 
+                                                   mode='lines+markers', name='Calls Vega', 
+                                                   line=dict(color='green'), showlegend=False), row=2, col=2)
+                        if not puts_data.empty:
+                            fig.add_trace(go.Scatter(x=puts_data['strike'], y=puts_data['vega'], 
+                                                   mode='lines+markers', name='Puts Vega', 
+                                                   line=dict(color='red'), showlegend=False), row=2, col=2)
+                        
+                        # Add current price line to all subplots
+                        current_price = greeks_result['underlying_price']
+                        for row in [1, 2]:
+                            for col in [1, 2]:
+                                fig.add_vline(x=current_price, line_dash="dash", line_color="white", 
+                                            row=row, col=col)
+                        
+                        fig.update_layout(
+                            height=600,
+                            title=f"Options Greeks for {greeks_result['underlying_ticker']}",
+                            template='plotly_dark'
+                        )
+                        
+                        fig.update_xaxes(title_text="Strike Price")
+                        fig.update_yaxes(title_text="Delta", row=1, col=1)
+                        fig.update_yaxes(title_text="Gamma", row=1, col=2)
+                        fig.update_yaxes(title_text="Theta", row=2, col=1)
+                        fig.update_yaxes(title_text="Vega", row=2, col=2)
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Greeks Explanation
+                    st.subheader("📚 Understanding the Greeks")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("""
+                        **🔺 Delta (Δ)**
+                        - Measures price sensitivity to $1 move in underlying
+                        - Calls: 0 to 1 | Puts: -1 to 0
+                        - Higher absolute delta = more sensitive to price moves
+                        
+                        **🔄 Gamma (Γ)**
+                        - Rate of change of Delta
+                        - Highest for ATM options
+                        - Shows how Delta will change as price moves
+                        """)
+                    
+                    with col2:
+                        st.markdown("""
+                        **⏰ Theta (Θ)**
+                        - Time decay per day
+                        - Always negative for long options
+                        - Accelerates as expiration approaches
+                        
+                        **📊 Vega (ν)**
+                        - Sensitivity to volatility changes
+                        - Highest for ATM options
+                        - Important for volatility plays
+                        """)
+                    
+                    # Export Greeks data
+                    st.subheader("📤 Export Greeks Data")
+                    
+                    greeks_export = {
+                        'analysis_timestamp': datetime.now().isoformat(),
+                        'underlying_ticker': greeks_result['underlying_ticker'],
+                        'underlying_price': greeks_result['underlying_price'],
+                        'expiration': greeks_result['expiration'],
+                        'days_to_expiry': greeks_result['days_to_expiry'],
+                        'summary_stats': greeks_result['summary_stats'],
+                        'total_contracts': greeks_result['total_contracts']
+                    }
+                    
+                    st.download_button(
+                        "📊 Download Greeks Summary",
+                        json.dumps(greeks_export, indent=2),
+                        f"{greeks_result['underlying_ticker']}_greeks_summary.json",
+                        "application/json"
+                    )
+                    
+                    # Download full Greeks data as CSV
+                    if not all_greeks_df.empty:
+                        csv_data = all_greeks_df.to_csv(index=False)
+                        st.download_button(
+                            "📋 Download Full Greeks CSV",
+                            csv_data,
+                            f"{greeks_result['underlying_ticker']}_greeks_full.csv",
+                            "text/csv"
+                        )
+                
+                except Exception as e:
+                    st.error(f"❌ Greeks analysis failed: {str(e)}")
+                    if debug_mode:
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        else:
+            # Instructions for Greeks tab
+            st.markdown("""
+            ## 🔢 Options Greeks Analysis
+            
+            **The Greeks** are essential risk measures that quantify how option prices change relative to various factors.
+            
+            ### 🎯 **What You'll Get:**
+            - **Real-time Greeks calculations** for all available options
+            - **Visual charts** showing Greeks across strike prices
+            - **Summary statistics** highlighting key levels
+            - **ATM, OTM analysis** for better understanding
+            - **Export capabilities** for further analysis
+            
+            ### 📊 **Key Greeks Explained:**
+            
+            **🔺 Delta:** Price sensitivity  
+            - **Call Delta:** 0 to 1 (increases as price rises)
+            - **Put Delta:** -1 to 0 (becomes less negative as price rises)
+            - **ATM options:** ~0.5 delta for calls, ~-0.5 for puts
+            
+            **🔄 Gamma:** Delta sensitivity  
+            - **Highest** for at-the-money (ATM) options
+            - **Lower** for in-the-money (ITM) and out-of-the-money (OTM)
+            - **Acceleration** factor for Delta changes
+            
+            **⏰ Theta:** Time decay  
+            - **Always negative** for long options (you lose money daily)
+            - **Accelerates** as expiration approaches
+            - **Highest** for ATM options near expiration
+            
+            **📊 Vega:** Volatility sensitivity  
+            - **Positive** for long options (higher vol = higher prices)
+            - **Highest** for ATM options
+            - **Decreases** as expiration approaches
+            
+            ### 🚀 **How to Use:**
+            1. **Enter a symbol** (e.g., EWU, SPY, QQQ)
+            2. **Click "Get Greeks Data"** to fetch real options data
+            3. **Analyze the tables** for specific strikes and expirations
+            4. **Study the charts** to see Greeks patterns
+            5. **Export data** for your own analysis
+            
+            ### 💡 **Trading Applications:**
+            - **Delta hedging:** Manage directional risk
+            - **Gamma scalping:** Profit from volatility
+            - **Theta strategies:** Benefit from time decay
+            - **Vega plays:** Trade volatility expectations
+            """)
+
+
 if __name__ == "__main__":
     main()
