@@ -1557,6 +1557,909 @@ class PolygonRealDataStrategist:
         
         return summary
 
+    def backtest_strategy(self, ticker: str, strategy_name: str, start_date: str, end_date: str, 
+                         parameters: Dict = None) -> Dict:
+        """Backtest an options strategy over a specified period"""
+        try:
+            print(f"🔄 Starting backtest for {strategy_name} on {ticker}")
+            
+            # Get historical data for backtesting period
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            # Fetch extended historical data
+            total_days = (end_dt - start_dt).days + 100  # Extra days for indicators
+            historical_data = self.get_stock_data(ticker, days=total_days)
+            
+            # Filter data to backtest period
+            hist_df = historical_data['historical_data']
+            mask = (hist_df.index >= start_dt) & (hist_df.index <= end_dt)
+            backtest_df = hist_df[mask].copy()
+            
+            if len(backtest_df) < 30:
+                raise ValueError(f"Insufficient data for backtesting period: {len(backtest_df)} days")
+            
+            # Run strategy backtest
+            if strategy_name == 'COVERED_CALL':
+                results = self._backtest_covered_call(backtest_df, parameters or {})
+            elif strategy_name == 'CASH_SECURED_PUT':
+                results = self._backtest_cash_secured_put(backtest_df, parameters or {})
+            elif strategy_name == 'IRON_CONDOR':
+                results = self._backtest_iron_condor(backtest_df, parameters or {})
+            elif strategy_name == 'BULL_CALL_SPREAD':
+                results = self._backtest_bull_call_spread(backtest_df, parameters or {})
+            elif strategy_name == 'BEAR_PUT_SPREAD':
+                results = self._backtest_bear_put_spread(backtest_df, parameters or {})
+            else:
+                # Default buy and hold strategy
+                results = self._backtest_buy_and_hold(backtest_df)
+            
+            # Calculate performance metrics
+            performance = self._calculate_backtest_performance(results, backtest_df)
+            
+            return {
+                'ticker': ticker,
+                'strategy': strategy_name,
+                'start_date': start_date,
+                'end_date': end_date,
+                'parameters': parameters or {},
+                'results': results,
+                'performance': performance,
+                'success': True
+            }
+            
+        except Exception as e:
+            print(f"❌ Backtest failed: {str(e)}")
+            return {
+                'ticker': ticker,
+                'strategy': strategy_name,
+                'error': str(e),
+                'success': False
+            }
+    
+    def _backtest_covered_call(self, df: pd.DataFrame, params: Dict) -> Dict:
+        """Backtest covered call strategy"""
+        # Parameters
+        dte_target = params.get('days_to_expiry', 30)  # Days to expiry
+        delta_target = params.get('delta_target', 0.3)  # Target delta
+        
+        trades = []
+        equity_curve = []
+        current_position = None
+        total_pnl = 0
+        
+        for i in range(len(df)):
+            current_date = df.index[i]
+            current_price = df.iloc[i]['close']
+            
+            # If no position, enter new covered call
+            if current_position is None:
+                # Buy 100 shares
+                stock_cost = current_price * 100
+                # Sell call option (estimate premium)
+                call_strike = current_price * (1 + delta_target)
+                call_premium = self._estimate_option_premium(current_price, call_strike, dte_target, 'call') * 100
+                
+                current_position = {
+                    'entry_date': current_date,
+                    'stock_price': current_price,
+                    'stock_cost': stock_cost,
+                    'call_strike': call_strike,
+                    'call_premium': call_premium,
+                    'expiry_date': current_date + timedelta(days=dte_target)
+                }
+                
+                total_pnl -= stock_cost  # Buy stock
+                total_pnl += call_premium  # Sell call
+            
+            # Check if position should be closed
+            if current_position and current_date >= current_position['expiry_date']:
+                # Close position
+                stock_pnl = (current_price - current_position['stock_price']) * 100
+                
+                if current_price > current_position['call_strike']:
+                    # Called away
+                    stock_sale = current_position['call_strike'] * 100
+                    call_pnl = 0  # Keep full premium
+                else:
+                    # Keep stock
+                    stock_sale = current_price * 100
+                    call_pnl = 0  # Keep full premium
+                
+                total_pnl += stock_sale
+                
+                trade_pnl = (stock_sale + current_position['call_premium'] - current_position['stock_cost'])
+                
+                trades.append({
+                    'entry_date': current_position['entry_date'],
+                    'exit_date': current_date,
+                    'strategy': 'COVERED_CALL',
+                    'pnl': trade_pnl,
+                    'return_pct': (trade_pnl / current_position['stock_cost']) * 100
+                })
+                
+                current_position = None
+            
+            equity_curve.append({
+                'date': current_date,
+                'portfolio_value': total_pnl + (current_price * 100 if current_position else 0),
+                'underlying_price': current_price
+            })
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _backtest_cash_secured_put(self, df: pd.DataFrame, params: Dict) -> Dict:
+        """Backtest cash secured put strategy"""
+        dte_target = params.get('days_to_expiry', 30)
+        delta_target = params.get('delta_target', -0.3)
+        
+        trades = []
+        equity_curve = []
+        current_position = None
+        cash_balance = 10000  # Starting cash
+        total_pnl = 0
+        
+        for i in range(len(df)):
+            current_date = df.index[i]
+            current_price = df.iloc[i]['close']
+            
+            if current_position is None and cash_balance >= current_price * 100:
+                # Sell put option
+                put_strike = current_price * (1 + delta_target)  # OTM put
+                put_premium = self._estimate_option_premium(current_price, put_strike, dte_target, 'put') * 100
+                
+                current_position = {
+                    'entry_date': current_date,
+                    'put_strike': put_strike,
+                    'put_premium': put_premium,
+                    'expiry_date': current_date + timedelta(days=dte_target)
+                }
+                
+                cash_balance += put_premium
+                total_pnl += put_premium
+            
+            if current_position and current_date >= current_position['expiry_date']:
+                if current_price < current_position['put_strike']:
+                    # Assigned - buy stock
+                    stock_cost = current_position['put_strike'] * 100
+                    cash_balance -= stock_cost
+                    total_pnl -= stock_cost
+                    
+                    trade_pnl = current_position['put_premium'] - (current_position['put_strike'] - current_price) * 100
+                else:
+                    # Keep premium
+                    trade_pnl = current_position['put_premium']
+                
+                trades.append({
+                    'entry_date': current_position['entry_date'],
+                    'exit_date': current_date,
+                    'strategy': 'CASH_SECURED_PUT',
+                    'pnl': trade_pnl,
+                    'return_pct': (trade_pnl / (current_position['put_strike'] * 100)) * 100
+                })
+                
+                current_position = None
+            
+            portfolio_value = cash_balance + total_pnl
+            equity_curve.append({
+                'date': current_date,
+                'portfolio_value': portfolio_value,
+                'underlying_price': current_price
+            })
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _backtest_iron_condor(self, df: pd.DataFrame, params: Dict) -> Dict:
+        """Backtest iron condor strategy"""
+        dte_target = params.get('days_to_expiry', 30)
+        wing_width = params.get('wing_width', 0.05)  # 5% wing width
+        
+        trades = []
+        equity_curve = []
+        total_pnl = 0
+        
+        i = 0
+        while i < len(df) - dte_target:
+            current_date = df.index[i]
+            current_price = df.iloc[i]['close']
+            
+            # Set up iron condor strikes
+            call_sell_strike = current_price * 1.05
+            call_buy_strike = current_price * 1.10
+            put_sell_strike = current_price * 0.95
+            put_buy_strike = current_price * 0.90
+            
+            # Calculate premiums
+            call_sell_premium = self._estimate_option_premium(current_price, call_sell_strike, dte_target, 'call')
+            call_buy_premium = self._estimate_option_premium(current_price, call_buy_strike, dte_target, 'call')
+            put_sell_premium = self._estimate_option_premium(current_price, put_sell_strike, dte_target, 'put')
+            put_buy_premium = self._estimate_option_premium(current_price, put_buy_strike, dte_target, 'put')
+            
+            net_credit = (call_sell_premium + put_sell_premium - call_buy_premium - put_buy_premium) * 100
+            
+            # Jump to expiry
+            expiry_idx = min(i + dte_target, len(df) - 1)
+            expiry_date = df.index[expiry_idx]
+            expiry_price = df.iloc[expiry_idx]['close']
+            
+            # Calculate P&L at expiry
+            if put_buy_strike <= expiry_price <= call_buy_strike:
+                # Max profit - all options expire worthless
+                trade_pnl = net_credit
+            elif expiry_price < put_sell_strike:
+                # Loss on put side
+                put_loss = (put_sell_strike - expiry_price) * 100
+                max_loss = (put_sell_strike - put_buy_strike) * 100
+                trade_pnl = net_credit - min(put_loss, max_loss)
+            elif expiry_price > call_sell_strike:
+                # Loss on call side
+                call_loss = (expiry_price - call_sell_strike) * 100
+                max_loss = (call_buy_strike - call_sell_strike) * 100
+                trade_pnl = net_credit - min(call_loss, max_loss)
+            else:
+                # In profit zone
+                trade_pnl = net_credit
+            
+            trades.append({
+                'entry_date': current_date,
+                'exit_date': expiry_date,
+                'strategy': 'IRON_CONDOR',
+                'pnl': trade_pnl,
+                'return_pct': (trade_pnl / (abs(net_credit) + 1000)) * 100  # Rough margin estimate
+            })
+            
+            total_pnl += trade_pnl
+            
+            # Add equity curve points
+            for j in range(i, expiry_idx + 1):
+                equity_curve.append({
+                    'date': df.index[j],
+                    'portfolio_value': total_pnl,
+                    'underlying_price': df.iloc[j]['close']
+                })
+            
+            i = expiry_idx + 1
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _backtest_bull_call_spread(self, df: pd.DataFrame, params: Dict) -> Dict:
+        """Backtest bull call spread strategy"""
+        dte_target = params.get('days_to_expiry', 30)
+        
+        trades = []
+        equity_curve = []
+        total_pnl = 0
+        
+        i = 0
+        while i < len(df) - dte_target:
+            current_date = df.index[i]
+            current_price = df.iloc[i]['close']
+            
+            # Set up bull call spread
+            buy_strike = current_price  # ATM
+            sell_strike = current_price * 1.05  # 5% OTM
+            
+            buy_premium = self._estimate_option_premium(current_price, buy_strike, dte_target, 'call')
+            sell_premium = self._estimate_option_premium(current_price, sell_strike, dte_target, 'call')
+            
+            net_debit = (buy_premium - sell_premium) * 100
+            
+            # Jump to expiry
+            expiry_idx = min(i + dte_target, len(df) - 1)
+            expiry_date = df.index[expiry_idx]
+            expiry_price = df.iloc[expiry_idx]['close']
+            
+            # Calculate P&L at expiry
+            if expiry_price <= buy_strike:
+                trade_pnl = -net_debit  # Max loss
+            elif expiry_price >= sell_strike:
+                trade_pnl = (sell_strike - buy_strike) * 100 - net_debit  # Max profit
+            else:
+                trade_pnl = (expiry_price - buy_strike) * 100 - net_debit
+            
+            trades.append({
+                'entry_date': current_date,
+                'exit_date': expiry_date,
+                'strategy': 'BULL_CALL_SPREAD',
+                'pnl': trade_pnl,
+                'return_pct': (trade_pnl / abs(net_debit)) * 100
+            })
+            
+            total_pnl += trade_pnl
+            
+            # Add equity curve points
+            for j in range(i, expiry_idx + 1):
+                equity_curve.append({
+                    'date': df.index[j],
+                    'portfolio_value': total_pnl,
+                    'underlying_price': df.iloc[j]['close']
+                })
+            
+            i = expiry_idx + 5  # Wait 5 days before next trade
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _backtest_bear_put_spread(self, df: pd.DataFrame, params: Dict) -> Dict:
+        """Backtest bear put spread strategy"""
+        dte_target = params.get('days_to_expiry', 30)
+        
+        trades = []
+        equity_curve = []
+        total_pnl = 0
+        
+        i = 0
+        while i < len(df) - dte_target:
+            current_date = df.index[i]
+            current_price = df.iloc[i]['close']
+            
+            # Set up bear put spread
+            buy_strike = current_price  # ATM
+            sell_strike = current_price * 0.95  # 5% OTM
+            
+            buy_premium = self._estimate_option_premium(current_price, buy_strike, dte_target, 'put')
+            sell_premium = self._estimate_option_premium(current_price, sell_strike, dte_target, 'put')
+            
+            net_debit = (buy_premium - sell_premium) * 100
+            
+            # Jump to expiry
+            expiry_idx = min(i + dte_target, len(df) - 1)
+            expiry_date = df.index[expiry_idx]
+            expiry_price = df.iloc[expiry_idx]['close']
+            
+            # Calculate P&L at expiry
+            if expiry_price >= buy_strike:
+                trade_pnl = -net_debit  # Max loss
+            elif expiry_price <= sell_strike:
+                trade_pnl = (buy_strike - sell_strike) * 100 - net_debit  # Max profit
+            else:
+                trade_pnl = (buy_strike - expiry_price) * 100 - net_debit
+            
+            trades.append({
+                'entry_date': current_date,
+                'exit_date': expiry_date,
+                'strategy': 'BEAR_PUT_SPREAD',
+                'pnl': trade_pnl,
+                'return_pct': (trade_pnl / abs(net_debit)) * 100
+            })
+            
+            total_pnl += trade_pnl
+            
+            # Add equity curve points
+            for j in range(i, expiry_idx + 1):
+                equity_curve.append({
+                    'date': df.index[j],
+                    'portfolio_value': total_pnl,
+                    'underlying_price': df.iloc[j]['close']
+                })
+            
+            i = expiry_idx + 5  # Wait 5 days before next trade
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _backtest_buy_and_hold(self, df: pd.DataFrame) -> Dict:
+        """Backtest simple buy and hold strategy"""
+        start_price = df.iloc[0]['close']
+        end_price = df.iloc[-1]['close']
+        
+        shares = 100
+        start_value = start_price * shares
+        end_value = end_price * shares
+        total_pnl = end_value - start_value
+        
+        equity_curve = []
+        for i in range(len(df)):
+            current_price = df.iloc[i]['close']
+            portfolio_value = (current_price * shares) - start_value
+            equity_curve.append({
+                'date': df.index[i],
+                'portfolio_value': portfolio_value,
+                'underlying_price': current_price
+            })
+        
+        trades = [{
+            'entry_date': df.index[0],
+            'exit_date': df.index[-1],
+            'strategy': 'BUY_AND_HOLD',
+            'pnl': total_pnl,
+            'return_pct': ((end_price / start_price) - 1) * 100
+        }]
+        
+        return {
+            'trades': trades,
+            'equity_curve': equity_curve,
+            'final_pnl': total_pnl
+        }
+    
+    def _estimate_option_premium(self, spot: float, strike: float, dte: int, option_type: str) -> float:
+        """Estimate option premium using simplified Black-Scholes"""
+        T = dte / 365.0
+        r = 0.05
+        vol = 0.25
+        
+        # Adjust vol for moneyness
+        moneyness = strike / spot
+        if option_type == 'put' and moneyness > 1.0:
+            vol *= (1 + (moneyness - 1) * 0.3)
+        elif option_type == 'call' and moneyness < 1.0:
+            vol *= (1 + (1 - moneyness) * 0.2)
+        
+        return self._black_scholes_price(spot, strike, 
+                                       (datetime.now() + timedelta(days=dte)).strftime('%Y-%m-%d'), 
+                                       option_type, vol, r)
+    
+    def _calculate_backtest_performance(self, results: Dict, df: pd.DataFrame) -> Dict:
+        """Calculate comprehensive backtest performance metrics"""
+        trades = results['trades']
+        equity_curve = results['equity_curve']
+        
+        if not trades:
+            return {'error': 'No trades to analyze'}
+        
+        # Basic metrics
+        total_trades = len(trades)
+        winning_trades = len([t for t in trades if t['pnl'] > 0])
+        losing_trades = len([t for t in trades if t['pnl'] < 0])
+        win_rate = (winning_trades / total_trades) * 100 if total_trades > 0 else 0
+        
+        total_pnl = sum(t['pnl'] for t in trades)
+        avg_win = np.mean([t['pnl'] for t in trades if t['pnl'] > 0]) if winning_trades > 0 else 0
+        avg_loss = np.mean([t['pnl'] for t in trades if t['pnl'] < 0]) if losing_trades > 0 else 0
+        
+        # Returns analysis
+        returns = [t['return_pct'] for t in trades]
+        avg_return = np.mean(returns) if returns else 0
+        volatility = np.std(returns) if len(returns) > 1 else 0
+        
+        # Sharpe ratio (assuming risk-free rate of 5%)
+        excess_returns = [r - 5 for r in returns]
+        sharpe_ratio = np.mean(excess_returns) / np.std(excess_returns) if len(excess_returns) > 1 and np.std(excess_returns) != 0 else 0
+        
+        # Drawdown analysis
+        equity_values = [point['portfolio_value'] for point in equity_curve]
+        running_max = np.maximum.accumulate(equity_values)
+        drawdowns = [(eq - max_val) / max_val * 100 if max_val != 0 else 0 
+                    for eq, max_val in zip(equity_values, running_max)]
+        max_drawdown = min(drawdowns) if drawdowns else 0
+        
+        # Time in market
+        start_date = trades[0]['entry_date'] if trades else df.index[0]
+        end_date = trades[-1]['exit_date'] if trades else df.index[-1]
+        total_days = (end_date - start_date).days
+        
+        # Benchmark comparison (buy and hold)
+        benchmark_return = ((df.iloc[-1]['close'] / df.iloc[0]['close']) - 1) * 100
+        
+        return {
+            'total_trades': total_trades,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'win_rate': round(win_rate, 2),
+            'total_pnl': round(total_pnl, 2),
+            'avg_win': round(avg_win, 2),
+            'avg_loss': round(avg_loss, 2),
+            'avg_return_per_trade': round(avg_return, 2),
+            'volatility': round(volatility, 2),
+            'sharpe_ratio': round(sharpe_ratio, 2),
+            'max_drawdown': round(max_drawdown, 2),
+            'total_days': total_days,
+            'benchmark_return': round(benchmark_return, 2),
+            'alpha': round(avg_return - (benchmark_return / total_trades if total_trades > 0 else 0), 2)
+        }
+    
+    def predict_market_direction(self, ticker: str, prediction_days: int = 30) -> Dict:
+        """Predict market direction using technical analysis and volatility"""
+        try:
+            print(f"🔮 Generating market predictions for {ticker}")
+            
+            # Get extended historical data for better predictions
+            data = self.get_stock_data(ticker, days=500)
+            df = data['historical_data']
+            
+            current_price = data['current_price']
+            
+            # Technical analysis predictions
+            technical_signals = self._analyze_technical_signals(df, current_price)
+            
+            # Volatility forecasting
+            volatility_forecast = self._forecast_volatility(df, prediction_days)
+            
+            # Support and resistance levels
+            support_resistance = self._calculate_support_resistance(df, current_price)
+            
+            # Price targets
+            price_targets = self._calculate_price_targets(df, current_price, technical_signals)
+            
+            # Momentum analysis
+            momentum_analysis = self._analyze_momentum(df, current_price)
+            
+            # Overall prediction
+            overall_prediction = self._generate_overall_prediction(
+                technical_signals, volatility_forecast, support_resistance, 
+                price_targets, momentum_analysis
+            )
+            
+            return {
+                'ticker': ticker,
+                'current_price': current_price,
+                'prediction_period': prediction_days,
+                'technical_signals': technical_signals,
+                'volatility_forecast': volatility_forecast,
+                'support_resistance': support_resistance,
+                'price_targets': price_targets,
+                'momentum_analysis': momentum_analysis,
+                'overall_prediction': overall_prediction,
+                'success': True
+            }
+            
+        except Exception as e:
+            print(f"❌ Prediction failed: {str(e)}")
+            return {
+                'ticker': ticker,
+                'error': str(e),
+                'success': False
+            }
+    
+    def _analyze_technical_signals(self, df: pd.DataFrame, current_price: float) -> Dict:
+        """Analyze technical indicators for prediction signals"""
+        latest = df.iloc[-1]
+        
+        # Calculate additional indicators if not present
+        if 'sma_20' not in df.columns:
+            df['sma_20'] = df['close'].rolling(20).mean()
+            df['sma_50'] = df['close'].rolling(50).mean()
+            df['sma_200'] = df['close'].rolling(200).mean()
+        
+        # RSI signal
+        rsi = latest.get('rsi', 50)
+        if rsi > 70:
+            rsi_signal = 'BEARISH'
+            rsi_strength = min((rsi - 70) / 10, 1.0)
+        elif rsi < 30:
+            rsi_signal = 'BULLISH'
+            rsi_strength = min((30 - rsi) / 10, 1.0)
+        else:
+            rsi_signal = 'NEUTRAL'
+            rsi_strength = 0.5
+        
+        # Moving average signals
+        sma_20 = latest.get('sma_20', current_price)
+        sma_50 = latest.get('sma_50', current_price)
+        sma_200 = latest.get('sma_200', current_price)
+        
+        ma_signals = []
+        if current_price > sma_20:
+            ma_signals.append('SHORT_TERM_BULLISH')
+        if current_price > sma_50:
+            ma_signals.append('MEDIUM_TERM_BULLISH')
+        if current_price > sma_200:
+            ma_signals.append('LONG_TERM_BULLISH')
+        
+        # MACD signal
+        macd_line = df['close'].ewm(span=12).mean() - df['close'].ewm(span=26).mean()
+        macd_signal = macd_line.ewm(span=9).mean()
+        macd_histogram = macd_line - macd_signal
+        
+        current_macd = macd_histogram.iloc[-1]
+        prev_macd = macd_histogram.iloc[-2] if len(macd_histogram) > 1 else 0
+        
+        if current_macd > 0 and current_macd > prev_macd:
+            macd_signal_direction = 'BULLISH'
+        elif current_macd < 0 and current_macd < prev_macd:
+            macd_signal_direction = 'BEARISH'
+        else:
+            macd_signal_direction = 'NEUTRAL'
+        
+        return {
+            'rsi_signal': rsi_signal,
+            'rsi_value': round(rsi, 2),
+            'rsi_strength': round(rsi_strength, 2),
+            'moving_average_signals': ma_signals,
+            'macd_signal': macd_signal_direction,
+            'macd_value': round(current_macd, 4),
+            'price_vs_sma20': round(((current_price / sma_20) - 1) * 100, 2),
+            'price_vs_sma50': round(((current_price / sma_50) - 1) * 100, 2),
+            'price_vs_sma200': round(((current_price / sma_200) - 1) * 100, 2)
+        }
+    
+    def _forecast_volatility(self, df: pd.DataFrame, days: int) -> Dict:
+        """Forecast volatility using GARCH-like simple model"""
+        returns = df['close'].pct_change().dropna()
+        
+        # Current realized volatility
+        vol_10d = returns.tail(10).std() * np.sqrt(252)
+        vol_21d = returns.tail(21).std() * np.sqrt(252)
+        vol_63d = returns.tail(63).std() * np.sqrt(252)
+        
+        # Simple volatility forecast (mean reversion model)
+        long_term_vol = returns.std() * np.sqrt(252)
+        current_vol = vol_21d
+        
+        # Mean reversion parameter (alpha)
+        alpha = 0.1
+        forecast_vol = current_vol * (1 - alpha) + long_term_vol * alpha
+        
+        # Volatility regime
+        if current_vol > long_term_vol * 1.5:
+            regime = 'HIGH_VOLATILITY'
+            regime_confidence = min((current_vol / long_term_vol - 1), 1.0)
+        elif current_vol < long_term_vol * 0.7:
+            regime = 'LOW_VOLATILITY'
+            regime_confidence = min((1 - current_vol / long_term_vol), 1.0)
+        else:
+            regime = 'NORMAL_VOLATILITY'
+            regime_confidence = 0.5
+        
+        return {
+            'current_vol_10d': round(vol_10d, 3),
+            'current_vol_21d': round(vol_21d, 3),
+            'current_vol_63d': round(vol_63d, 3),
+            'long_term_vol': round(long_term_vol, 3),
+            'forecast_vol': round(forecast_vol, 3),
+            'volatility_regime': regime,
+            'regime_confidence': round(regime_confidence, 2),
+            'vol_trend': 'INCREASING' if vol_10d > vol_21d else 'DECREASING'
+        }
+    
+    def _calculate_support_resistance(self, df: pd.DataFrame, current_price: float) -> Dict:
+        """Calculate support and resistance levels"""
+        # Use recent highs and lows
+        recent_data = df.tail(252)  # Last year
+        
+        # Resistance levels (recent highs)
+        resistance_levels = []
+        for i in range(5, len(recent_data) - 5):
+            if recent_data.iloc[i]['high'] == recent_data.iloc[i-5:i+6]['high'].max():
+                resistance_levels.append(recent_data.iloc[i]['high'])
+        
+        # Support levels (recent lows)
+        support_levels = []
+        for i in range(5, len(recent_data) - 5):
+            if recent_data.iloc[i]['low'] == recent_data.iloc[i-5:i+6]['low'].min():
+                support_levels.append(recent_data.iloc[i]['low'])
+        
+        # Filter and sort levels
+        resistance_levels = sorted([r for r in resistance_levels if r > current_price])[:3]
+        support_levels = sorted([s for s in support_levels if s < current_price], reverse=True)[:3]
+        
+        # Fibonacci retracements
+        high_52w = recent_data['high'].max()
+        low_52w = recent_data['low'].min()
+        
+        fib_levels = {
+            '23.6%': low_52w + (high_52w - low_52w) * 0.236,
+            '38.2%': low_52w + (high_52w - low_52w) * 0.382,
+            '50.0%': low_52w + (high_52w - low_52w) * 0.500,
+            '61.8%': low_52w + (high_52w - low_52w) * 0.618,
+            '78.6%': low_52w + (high_52w - low_52w) * 0.786
+        }
+        
+        return {
+            'resistance_levels': [round(r, 2) for r in resistance_levels],
+            'support_levels': [round(s, 2) for s in support_levels],
+            'fibonacci_levels': {k: round(v, 2) for k, v in fib_levels.items()},
+            '52_week_high': round(high_52w, 2),
+            '52_week_low': round(low_52w, 2),
+            'distance_to_52w_high': round(((high_52w / current_price) - 1) * 100, 2),
+            'distance_to_52w_low': round(((current_price / low_52w) - 1) * 100, 2)
+        }
+    
+    def _calculate_price_targets(self, df: pd.DataFrame, current_price: float, 
+                                technical_signals: Dict) -> Dict:
+        """Calculate price targets based on technical analysis"""
+        
+        # Average True Range for volatility-based targets
+        high_low = df['high'] - df['low']
+        high_close = abs(df['high'] - df['close'].shift())
+        low_close = abs(df['low'] - df['close'].shift())
+        atr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1).rolling(14).mean()
+        current_atr = atr.iloc[-1]
+        
+        # Bollinger Bands
+        bb_period = 20
+        bb_std = 2
+        bb_middle = df['close'].rolling(bb_period).mean().iloc[-1]
+        bb_std_dev = df['close'].rolling(bb_period).std().iloc[-1]
+        bb_upper = bb_middle + (bb_std_dev * bb_std)
+        bb_lower = bb_middle - (bb_std_dev * bb_std)
+        
+        # Calculate targets based on trend
+        if any('BULLISH' in signal for signal in technical_signals['moving_average_signals']):
+            # Bullish targets
+            target_1 = current_price + current_atr
+            target_2 = current_price + (current_atr * 2)
+            target_3 = current_price + (current_atr * 3)
+            
+            stop_loss = current_price - current_atr
+        else:
+            # Bearish targets
+            target_1 = current_price - current_atr
+            target_2 = current_price - (current_atr * 2)
+            target_3 = current_price - (current_atr * 3)
+            
+            stop_loss = current_price + current_atr
+        
+        # Probability estimates (simplified)
+        target_1_prob = 0.7
+        target_2_prob = 0.4
+        target_3_prob = 0.2
+        
+        return {
+            'bullish_targets': {
+                'target_1': round(max(target_1, current_price), 2),
+                'target_2': round(max(target_2, current_price), 2),
+                'target_3': round(max(target_3, current_price), 2),
+                'probabilities': [target_1_prob, target_2_prob, target_3_prob]
+            },
+            'bearish_targets': {
+                'target_1': round(min(target_1, current_price), 2),
+                'target_2': round(min(target_2, current_price), 2),
+                'target_3': round(min(target_3, current_price), 2),
+                'probabilities': [target_1_prob, target_2_prob, target_3_prob]
+            },
+            'bollinger_bands': {
+                'upper': round(bb_upper, 2),
+                'middle': round(bb_middle, 2),
+                'lower': round(bb_lower, 2)
+            },
+            'atr_value': round(current_atr, 2),
+            'suggested_stop_loss': round(stop_loss, 2)
+        }
+    
+    def _analyze_momentum(self, df: pd.DataFrame, current_price: float) -> Dict:
+        """Analyze price momentum indicators"""
+        
+        # Rate of Change (ROC)
+        roc_5 = ((current_price / df['close'].iloc[-6]) - 1) * 100 if len(df) > 5 else 0
+        roc_10 = ((current_price / df['close'].iloc[-11]) - 1) * 100 if len(df) > 10 else 0
+        roc_20 = ((current_price / df['close'].iloc[-21]) - 1) * 100 if len(df) > 20 else 0
+        
+        # Volume analysis
+        avg_volume = df['volume'].rolling(20).mean().iloc[-1]
+        current_volume = df['volume'].iloc[-1]
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
+        
+        # Price momentum
+        recent_highs = (df['close'].tail(5) == df['close'].tail(5).max()).sum()
+        recent_lows = (df['close'].tail(5) == df['close'].tail(5).min()).sum()
+        
+        if recent_highs >= 3:
+            momentum_direction = 'STRONG_BULLISH'
+        elif recent_lows >= 3:
+            momentum_direction = 'STRONG_BEARISH'
+        elif roc_5 > 2:
+            momentum_direction = 'BULLISH'
+        elif roc_5 < -2:
+            momentum_direction = 'BEARISH'
+        else:
+            momentum_direction = 'NEUTRAL'
+        
+        # Momentum strength
+        momentum_strength = abs(roc_5) / 5.0  # Normalize to 0-1 scale
+        momentum_strength = min(momentum_strength, 1.0)
+        
+        return {
+            'momentum_direction': momentum_direction,
+            'momentum_strength': round(momentum_strength, 2),
+            'roc_5_day': round(roc_5, 2),
+            'roc_10_day': round(roc_10, 2),
+            'roc_20_day': round(roc_20, 2),
+            'volume_ratio': round(volume_ratio, 2),
+            'volume_signal': 'HIGH' if volume_ratio > 1.5 else 'LOW' if volume_ratio < 0.7 else 'NORMAL'
+        }
+    
+    def _generate_overall_prediction(self, technical_signals: Dict, volatility_forecast: Dict,
+                                   support_resistance: Dict, price_targets: Dict,
+                                   momentum_analysis: Dict) -> Dict:
+        """Generate overall market prediction by combining all analyses"""
+        
+        # Scoring system
+        bullish_score = 0
+        bearish_score = 0
+        
+        # Technical signals scoring
+        if technical_signals['rsi_signal'] == 'BULLISH':
+            bullish_score += 2
+        elif technical_signals['rsi_signal'] == 'BEARISH':
+            bearish_score += 2
+        
+        bullish_ma_signals = len(technical_signals['moving_average_signals'])
+        bullish_score += bullish_ma_signals
+        
+        if technical_signals['macd_signal'] == 'BULLISH':
+            bullish_score += 1
+        elif technical_signals['macd_signal'] == 'BEARISH':
+            bearish_score += 1
+        
+        # Momentum scoring
+        if momentum_analysis['momentum_direction'] in ['BULLISH', 'STRONG_BULLISH']:
+            bullish_score += 2
+        elif momentum_analysis['momentum_direction'] in ['BEARISH', 'STRONG_BEARISH']:
+            bearish_score += 2
+        
+        # Volatility scoring
+        if volatility_forecast['volatility_regime'] == 'HIGH_VOLATILITY':
+            # High vol favors range-bound strategies
+            bearish_score += 1
+        elif volatility_forecast['volatility_regime'] == 'LOW_VOLATILITY':
+            # Low vol favors directional strategies
+            bullish_score += 1
+        
+        # Overall direction
+        total_score = bullish_score + bearish_score
+        if total_score == 0:
+            direction = 'NEUTRAL'
+            confidence = 0.5
+        else:
+            if bullish_score > bearish_score:
+                direction = 'BULLISH'
+                confidence = bullish_score / total_score
+            elif bearish_score > bullish_score:
+                direction = 'BEARISH'
+                confidence = bearish_score / total_score
+            else:
+                direction = 'NEUTRAL'
+                confidence = 0.5
+        
+        # Strength classification
+        if confidence >= 0.8:
+            strength = 'VERY_HIGH'
+        elif confidence >= 0.7:
+            strength = 'HIGH'
+        elif confidence >= 0.6:
+            strength = 'MODERATE'
+        else:
+            strength = 'LOW'
+        
+        # Time horizon recommendation
+        if momentum_analysis['momentum_strength'] > 0.7:
+            time_horizon = 'SHORT_TERM'  # 1-2 weeks
+        elif any('LONG_TERM' in signal for signal in technical_signals['moving_average_signals']):
+            time_horizon = 'LONG_TERM'  # 2-3 months
+        else:
+            time_horizon = 'MEDIUM_TERM'  # 1 month
+        
+        # Key risks
+        risks = []
+        if volatility_forecast['volatility_regime'] == 'HIGH_VOLATILITY':
+            risks.append('High volatility environment - expect larger price swings')
+        if momentum_analysis['volume_ratio'] < 0.7:
+            risks.append('Low volume - moves may not be sustainable')
+        if technical_signals['rsi_value'] > 70:
+            risks.append('Overbought conditions - potential pullback risk')
+        elif technical_signals['rsi_value'] < 30:
+            risks.append('Oversold conditions - potential bounce risk')
+        
+        return {
+            'direction': direction,
+            'confidence': round(confidence, 2),
+            'strength': strength,
+            'time_horizon': time_horizon,
+            'bullish_score': bullish_score,
+            'bearish_score': bearish_score,
+            'key_risks': risks,
+            'summary': f"{strength} {direction} prediction with {confidence:.0%} confidence for {time_horizon.lower().replace('_', ' ')} horizon"
+        }
+
     def analyze_symbol(self, ticker: str, debug: bool = False) -> Dict:
         """Analyze a single symbol with real data only and detailed error reporting"""
         try:
@@ -1876,9 +2779,13 @@ def main():
         st.session_state.analysis_result = None
     if 'greeks_result' not in st.session_state:
         st.session_state.greeks_result = None
+    if 'backtest_result' not in st.session_state:
+        st.session_state.backtest_result = None
+    if 'prediction_result' not in st.session_state:
+        st.session_state.prediction_result = None
     
     # Create tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Analysis", "📚 Strategy Guide", "🔢 Options Greeks"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Analysis", "📚 Strategy Guide", "🔢 Options Greeks", "📈 Backtester", "🔮 Market Predictions"])
     
     # Sidebar
     with st.sidebar:
@@ -2589,6 +3496,686 @@ def main():
             - **Gamma scalping:** Profit from volatility
             - **Theta strategies:** Benefit from time decay
             - **Vega plays:** Trade volatility expectations
+            """)
+    
+    # Tab 4: Backtester
+    with tab4:
+        st.header("📈 Strategy Backtester")
+        
+        # Input section
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Auto-populate with symbol from analysis tab if available
+            default_symbol = "EWU"
+            if st.session_state.analysis_result and st.session_state.analysis_result.get('success'):
+                default_symbol = st.session_state.analysis_result['ticker']
+            
+            backtest_symbol = st.text_input(
+                "Symbol for Backtesting",
+                value=default_symbol,
+                help="Enter ticker symbol for strategy backtesting"
+            )
+            
+            # Strategy selection
+            available_strategies = [
+                'COVERED_CALL',
+                'CASH_SECURED_PUT', 
+                'IRON_CONDOR',
+                'BULL_CALL_SPREAD',
+                'BEAR_PUT_SPREAD',
+                'BUY_AND_HOLD'
+            ]
+            
+            # Auto-select best strategy if available
+            default_strategy = 'COVERED_CALL'
+            if st.session_state.analysis_result and st.session_state.analysis_result.get('success'):
+                default_strategy = st.session_state.analysis_result.get('best_strategy', 'COVERED_CALL')
+            
+            selected_strategy = st.selectbox(
+                "Strategy to Backtest",
+                available_strategies,
+                index=available_strategies.index(default_strategy) if default_strategy in available_strategies else 0
+            )
+            
+            # Date range
+            col1a, col1b = st.columns(2)
+            with col1a:
+                start_date = st.date_input(
+                    "Start Date",
+                    value=datetime.now() - timedelta(days=365),
+                    max_value=datetime.now() - timedelta(days=30)
+                )
+            with col1b:
+                end_date = st.date_input(
+                    "End Date", 
+                    value=datetime.now() - timedelta(days=1),
+                    max_value=datetime.now()
+                )
+        
+        with col2:
+            st.markdown("### Strategy Parameters")
+            
+            # Strategy-specific parameters
+            params = {}
+            
+            if selected_strategy in ['COVERED_CALL', 'CASH_SECURED_PUT']:
+                params['days_to_expiry'] = st.slider("Days to Expiry", 15, 60, 30)
+                params['delta_target'] = st.slider("Delta Target", 0.1, 0.5, 0.3, 0.05)
+            
+            elif selected_strategy == 'IRON_CONDOR':
+                params['days_to_expiry'] = st.slider("Days to Expiry", 15, 60, 30)
+                params['wing_width'] = st.slider("Wing Width %", 3, 10, 5) / 100
+            
+            elif selected_strategy in ['BULL_CALL_SPREAD', 'BEAR_PUT_SPREAD']:
+                params['days_to_expiry'] = st.slider("Days to Expiry", 15, 60, 30)
+            
+            run_backtest_button = st.button(
+                "🚀 Run Backtest",
+                type="primary",
+                disabled=not backtest_symbol or not polygon_key
+            )
+        
+        if run_backtest_button and backtest_symbol:
+            with st.spinner(f"Running {selected_strategy} backtest on {backtest_symbol}..."):
+                try:
+                    backtest_result = strategist.backtest_strategy(
+                        backtest_symbol.upper(),
+                        selected_strategy,
+                        start_date.strftime('%Y-%m-%d'),
+                        end_date.strftime('%Y-%m-%d'),
+                        params
+                    )
+                    
+                    if backtest_result['success']:
+                        st.success(f"✅ Backtest completed for {selected_strategy} on {backtest_result['ticker']}")
+                        
+                        # Performance Summary
+                        st.subheader("📊 Performance Summary")
+                        
+                        perf = backtest_result['performance']
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric("Total P&L", f"${perf['total_pnl']:.2f}")
+                            st.metric("Total Trades", perf['total_trades'])
+                        
+                        with col2:
+                            st.metric("Win Rate", f"{perf['win_rate']:.1f}%")
+                            st.metric("Avg Return/Trade", f"{perf['avg_return_per_trade']:.2f}%")
+                        
+                        with col3:
+                            st.metric("Sharpe Ratio", f"{perf['sharpe_ratio']:.2f}")
+                            st.metric("Max Drawdown", f"{perf['max_drawdown']:.2f}%")
+                        
+                        with col4:
+                            st.metric("vs Buy & Hold", f"{perf['alpha']:.2f}%")
+                            st.metric("Volatility", f"{perf['volatility']:.2f}%")
+                        
+                        # Detailed Performance
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("### 📈 Risk/Return Metrics")
+                            st.write(f"**Winning Trades:** {perf['winning_trades']}")
+                            st.write(f"**Losing Trades:** {perf['losing_trades']}")
+                            st.write(f"**Average Win:** ${perf['avg_win']:.2f}")
+                            st.write(f"**Average Loss:** ${perf['avg_loss']:.2f}")
+                            st.write(f"**Profit Factor:** {abs(perf['avg_win'] / perf['avg_loss']):.2f}" if perf['avg_loss'] != 0 else "N/A")
+                        
+                        with col2:
+                            st.markdown("### 📅 Time Analysis")
+                            st.write(f"**Backtest Period:** {perf['total_days']} days")
+                            st.write(f"**Benchmark Return:** {perf['benchmark_return']:.2f}%")
+                            st.write(f"**Strategy Alpha:** {perf['alpha']:.2f}%")
+                            
+                            # Performance classification
+                            if perf['sharpe_ratio'] > 1.5:
+                                perf_rating = "🏆 Excellent"
+                            elif perf['sharpe_ratio'] > 1.0:
+                                perf_rating = "✅ Good" 
+                            elif perf['sharpe_ratio'] > 0.5:
+                                perf_rating = "⚠️ Fair"
+                            else:
+                                perf_rating = "❌ Poor"
+                            
+                            st.write(f"**Performance Rating:** {perf_rating}")
+                        
+                        # Equity Curve Chart
+                        st.subheader("📈 Equity Curve")
+                        
+                        equity_data = backtest_result['results']['equity_curve']
+                        if equity_data:
+                            equity_df = pd.DataFrame(equity_data)
+                            
+                            fig = make_subplots(
+                                rows=2, cols=1,
+                                shared_xaxes=True,
+                                vertical_spacing=0.1,
+                                subplot_titles=('Strategy Performance vs Underlying', 'Underlying Price'),
+                                row_heights=[0.7, 0.3]
+                            )
+                            
+                            # Strategy equity curve
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=equity_df['date'],
+                                    y=equity_df['portfolio_value'],
+                                    mode='lines',
+                                    name=f'{selected_strategy} P&L',
+                                    line=dict(color='#00ff88', width=2)
+                                ),
+                                row=1, col=1
+                            )
+                            
+                            # Underlying price
+                            fig.add_trace(
+                                go.Scatter(
+                                    x=equity_df['date'],
+                                    y=equity_df['underlying_price'],
+                                    mode='lines',
+                                    name='Underlying Price',
+                                    line=dict(color='#ff6b35', width=2)
+                                ),
+                                row=2, col=1
+                            )
+                            
+                            fig.update_layout(
+                                height=600,
+                                title=f'{selected_strategy} Backtest Results - {backtest_result["ticker"]}',
+                                template='plotly_dark'
+                            )
+                            
+                            fig.update_yaxes(title_text="P&L ($)", row=1, col=1)
+                            fig.update_yaxes(title_text="Price ($)", row=2, col=1)
+                            fig.update_xaxes(title_text="Date", row=2, col=1)
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Trade Analysis
+                        trades = backtest_result['results']['trades']
+                        if trades:
+                            st.subheader("📋 Trade Analysis")
+                            
+                            trades_df = pd.DataFrame(trades)
+                            
+                            # Format for display
+                            display_trades = trades_df.copy()
+                            display_trades['entry_date'] = pd.to_datetime(display_trades['entry_date']).dt.strftime('%Y-%m-%d')
+                            display_trades['exit_date'] = pd.to_datetime(display_trades['exit_date']).dt.strftime('%Y-%m-%d')
+                            display_trades['pnl'] = display_trades['pnl'].apply(lambda x: f"${x:.2f}")
+                            display_trades['return_pct'] = display_trades['return_pct'].apply(lambda x: f"{x:.2f}%")
+                            
+                            # Show last 10 trades
+                            st.write("**Recent Trades:**")
+                            st.dataframe(display_trades.tail(10), use_container_width=True)
+                            
+                            # Trade distribution
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                # P&L distribution
+                                fig_hist = go.Figure(data=[
+                                    go.Histogram(
+                                        x=trades_df['return_pct'],
+                                        nbinsx=20,
+                                        name='Return Distribution',
+                                        marker_color='lightblue'
+                                    )
+                                ])
+                                fig_hist.update_layout(
+                                    title='Trade Return Distribution',
+                                    xaxis_title='Return %',
+                                    yaxis_title='Frequency',
+                                    template='plotly_dark'
+                                )
+                                st.plotly_chart(fig_hist, use_container_width=True)
+                            
+                            with col2:
+                                # Monthly returns
+                                trades_df['entry_month'] = pd.to_datetime(trades_df['entry_date']).dt.to_period('M')
+                                monthly_returns = trades_df.groupby('entry_month')['return_pct'].mean()
+                                
+                                fig_monthly = go.Figure(data=[
+                                    go.Bar(
+                                        x=[str(m) for m in monthly_returns.index],
+                                        y=monthly_returns.values,
+                                        name='Monthly Avg Returns',
+                                        marker_color='lightgreen'
+                                    )
+                                ])
+                                fig_monthly.update_layout(
+                                    title='Average Monthly Returns',
+                                    xaxis_title='Month',
+                                    yaxis_title='Return %',
+                                    template='plotly_dark'
+                                )
+                                st.plotly_chart(fig_monthly, use_container_width=True)
+                        
+                        # Export Results
+                        st.subheader("📤 Export Results")
+                        
+                        backtest_export = {
+                            'backtest_timestamp': datetime.now().isoformat(),
+                            'strategy': selected_strategy,
+                            'ticker': backtest_result['ticker'],
+                            'parameters': backtest_result['parameters'],
+                            'performance_metrics': backtest_result['performance'],
+                            'trade_count': len(trades) if trades else 0
+                        }
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.download_button(
+                                "📊 Download Summary",
+                                json.dumps(backtest_export, indent=2),
+                                f"{backtest_result['ticker']}_{selected_strategy}_backtest.json",
+                                "application/json"
+                            )
+                        
+                        with col2:
+                            if trades:
+                                trades_csv = pd.DataFrame(trades).to_csv(index=False)
+                                st.download_button(
+                                    "📋 Download Trades CSV",
+                                    trades_csv,
+                                    f"{backtest_result['ticker']}_{selected_strategy}_trades.csv",
+                                    "text/csv"
+                                )
+                    
+                    else:
+                        st.error(f"❌ Backtest failed: {backtest_result['error']}")
+                
+                except Exception as e:
+                    st.error(f"❌ Backtest error: {str(e)}")
+                    if debug_mode:
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        else:
+            # Instructions for Backtester tab
+            st.markdown("""
+            ## 📈 Strategy Backtester
+            
+            **Test your options strategies** on historical data to see how they would have performed in real market conditions.
+            
+            ### 🎯 **Available Strategies:**
+            - **Covered Call:** Income generation by selling calls against stock holdings
+            - **Cash Secured Put:** Acquire stock at discount by selling puts with cash backing
+            - **Iron Condor:** Range-bound strategy selling both call and put spreads
+            - **Bull Call Spread:** Moderate bullish strategy with defined risk/reward
+            - **Bear Put Spread:** Moderate bearish strategy with defined risk/reward
+            - **Buy & Hold:** Benchmark comparison strategy
+            
+            ### 📊 **What You'll Get:**
+            - **Performance Metrics:** Total P&L, Sharpe ratio, win rate, max drawdown
+            - **Equity Curve:** Visual representation of strategy performance over time
+            - **Trade Analysis:** Detailed breakdown of individual trades
+            - **Risk Analytics:** Volatility, alpha vs benchmark, profit factor
+            - **Export Capabilities:** Download results for further analysis
+            
+            ### 🔧 **Customizable Parameters:**
+            - **Days to Expiry:** Target option expiration timeline
+            - **Delta Targets:** Moneyness preferences for option selection
+            - **Wing Width:** Spread sizing for complex strategies
+            - **Date Range:** Custom backtesting periods
+            
+            ### 💡 **How to Use:**
+            1. **Select a symbol** (auto-populated from Analysis tab if available)
+            2. **Choose strategy** (best strategy auto-selected from analysis)
+            3. **Set parameters** using the sliders and inputs
+            4. **Select date range** for backtesting period
+            5. **Run backtest** and analyze the results
+            
+            ### ⚠️ **Important Notes:**
+            - **Past performance** does not guarantee future results
+            - **Transaction costs** and slippage are not included
+            - **Options pricing** uses Black-Scholes approximations
+            - **Results are theoretical** and for educational purposes
+            
+            ### 🎯 **Interpretation Guide:**
+            - **Sharpe Ratio > 1.5:** Excellent risk-adjusted returns
+            - **Win Rate > 60%:** Good consistency
+            - **Max Drawdown < 10%:** Conservative risk management
+            - **Positive Alpha:** Outperforming benchmark
+            """)
+    
+    # Tab 5: Market Predictions
+    with tab5:
+        st.header("🔮 Market Predictions")
+        
+        # Input section
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Auto-populate with symbol from analysis tab if available
+            default_symbol = "EWU"
+            if st.session_state.analysis_result and st.session_state.analysis_result.get('success'):
+                default_symbol = st.session_state.analysis_result['ticker']
+            
+            prediction_symbol = st.text_input(
+                "Symbol for Prediction",
+                value=default_symbol,
+                help="Enter ticker symbol for market prediction analysis"
+            )
+        
+        with col2:
+            prediction_days = st.slider(
+                "Prediction Horizon (Days)",
+                7, 90, 30,
+                help="Number of days to predict forward"
+            )
+            
+            get_prediction_button = st.button(
+                "🔮 Generate Prediction",
+                type="primary",
+                disabled=not prediction_symbol or not polygon_key
+            )
+        
+        if get_prediction_button and prediction_symbol:
+            with st.spinner(f"Generating market predictions for {prediction_symbol}..."):
+                try:
+                    prediction_result = strategist.predict_market_direction(
+                        prediction_symbol.upper(), 
+                        prediction_days
+                    )
+                    
+                    if prediction_result['success']:
+                        st.success(f"✅ Prediction analysis complete for {prediction_result['ticker']}")
+                        
+                        # Show connection to analysis tab if same symbol
+                        if (st.session_state.analysis_result and 
+                            st.session_state.analysis_result.get('success') and
+                            st.session_state.analysis_result['ticker'] == prediction_result['ticker']):
+                            st.info("🔗 This prediction analysis matches your symbol from the Analysis tab!")
+                        
+                        # Overall Prediction Summary
+                        st.subheader("🎯 Overall Prediction")
+                        
+                        overall = prediction_result['overall_prediction']
+                        
+                        # Main prediction card
+                        direction_emoji = "📈" if overall['direction'] == 'BULLISH' else "📉" if overall['direction'] == 'BEARISH' else "➡️"
+                        confidence_color = "success" if overall['confidence'] > 0.7 else "warning" if overall['confidence'] > 0.5 else "error"
+                        
+                        st.markdown(f"""
+                        <div style="padding: 20px; border-radius: 10px; background-color: rgba(0,0,0,0.1); border-left: 5px solid {'green' if overall['direction'] == 'BULLISH' else 'red' if overall['direction'] == 'BEARISH' else 'orange'};">
+                        <h3>{direction_emoji} {overall['direction']} Prediction</h3>
+                        <p><strong>Confidence:</strong> {overall['confidence']:.0%} ({overall['strength']})</p>
+                        <p><strong>Time Horizon:</strong> {overall['time_horizon'].replace('_', ' ')}</p>
+                        <p><strong>Summary:</strong> {overall['summary']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Prediction Components
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Current Price", f"${prediction_result['current_price']:.2f}")
+                            st.metric("Prediction Period", f"{prediction_days} days")
+                        
+                        with col2:
+                            st.metric("Bullish Signals", overall['bullish_score'])
+                            st.metric("Bearish Signals", overall['bearish_score'])
+                        
+                        with col3:
+                            st.metric("Confidence Level", f"{overall['confidence']:.0%}")
+                            st.metric("Signal Strength", overall['strength'])
+                        
+                        # Technical Analysis Details
+                        st.subheader("🔧 Technical Analysis Breakdown")
+                        
+                        tech = prediction_result['technical_signals']
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("### 📊 Momentum Indicators")
+                            
+                            # RSI Analysis
+                            rsi_color = "🔴" if tech['rsi_signal'] == 'BEARISH' else "🟢" if tech['rsi_signal'] == 'BULLISH' else "🟡"
+                            st.write(f"**RSI Signal:** {rsi_color} {tech['rsi_signal']} ({tech['rsi_value']:.1f})")
+                            
+                            # MACD Analysis
+                            macd_color = "🟢" if tech['macd_signal'] == 'BULLISH' else "🔴" if tech['macd_signal'] == 'BEARISH' else "🟡"
+                            st.write(f"**MACD Signal:** {macd_color} {tech['macd_signal']}")
+                            
+                            # Moving Average Analysis
+                            st.write("**Moving Average Signals:**")
+                            for signal in tech['moving_average_signals']:
+                                st.write(f"  • {signal.replace('_', ' ')}")
+                            
+                            if not tech['moving_average_signals']:
+                                st.write("  • No bullish MA signals")
+                        
+                        with col2:
+                            st.markdown("### 📈 Price vs Moving Averages")
+                            st.write(f"**vs 20-day SMA:** {tech['price_vs_sma20']:+.2f}%")
+                            st.write(f"**vs 50-day SMA:** {tech['price_vs_sma50']:+.2f}%")
+                            st.write(f"**vs 200-day SMA:** {tech['price_vs_sma200']:+.2f}%")
+                            
+                            st.markdown("### 🌊 Momentum Analysis")
+                            momentum = prediction_result['momentum_analysis']
+                            st.write(f"**Direction:** {momentum['momentum_direction']}")
+                            st.write(f"**Strength:** {momentum['momentum_strength']:.2f}")
+                            st.write(f"**5-day ROC:** {momentum['roc_5_day']:+.2f}%")
+                            st.write(f"**Volume Signal:** {momentum['volume_signal']}")
+                        
+                        # Volatility Forecast
+                        st.subheader("📊 Volatility Forecast")
+                        
+                        vol = prediction_result['volatility_forecast']
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric("Current Vol (21d)", f"{vol['current_vol_21d']:.1%}")
+                        with col2:
+                            st.metric("Forecast Vol", f"{vol['forecast_vol']:.1%}")
+                        with col3:
+                            st.metric("Vol Regime", vol['volatility_regime'])
+                        with col4:
+                            st.metric("Vol Trend", vol['vol_trend'])
+                        
+                        # Support and Resistance
+                        st.subheader("🎯 Support & Resistance Levels")
+                        
+                        sr = prediction_result['support_resistance']
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown("### 🔻 Support Levels")
+                            if sr['support_levels']:
+                                for i, level in enumerate(sr['support_levels'], 1):
+                                    distance = ((prediction_result['current_price'] / level) - 1) * 100
+                                    st.write(f"**S{i}:** ${level:.2f} (-{distance:.1f}%)")
+                            else:
+                                st.write("No clear support levels identified")
+                        
+                        with col2:
+                            st.markdown("### 🔺 Resistance Levels")
+                            if sr['resistance_levels']:
+                                for i, level in enumerate(sr['resistance_levels'], 1):
+                                    distance = ((level / prediction_result['current_price']) - 1) * 100
+                                    st.write(f"**R{i}:** ${level:.2f} (+{distance:.1f}%)")
+                            else:
+                                st.write("No clear resistance levels identified")
+                        
+                        with col3:
+                            st.markdown("### 📏 Key Levels")
+                            st.write(f"**52W High:** ${sr['52_week_high']:.2f} (+{sr['distance_to_52w_high']:.1f}%)")
+                            st.write(f"**52W Low:** ${sr['52_week_low']:.2f} (+{sr['distance_to_52w_low']:.1f}%)")
+                            
+                            # Fibonacci levels
+                            current_price = prediction_result['current_price']
+                            for level_name, level_price in sr['fibonacci_levels'].items():
+                                if abs(level_price - current_price) / current_price < 0.05:  # Within 5%
+                                    distance = ((level_price / current_price) - 1) * 100
+                                    st.write(f"**Fib {level_name}:** ${level_price:.2f} ({distance:+.1f}%)")
+                        
+                        # Price Targets
+                        st.subheader("🎯 Price Targets")
+                        
+                        targets = prediction_result['price_targets']
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("### 📈 Bullish Targets")
+                            bull_targets = targets['bullish_targets']
+                            for i, (target, prob) in enumerate(zip([bull_targets['target_1'], bull_targets['target_2'], bull_targets['target_3']], 
+                                                                 bull_targets['probabilities']), 1):
+                                distance = ((target / prediction_result['current_price']) - 1) * 100
+                                st.write(f"**T{i}:** ${target:.2f} (+{distance:.1f}%) - {prob:.0%} probability")
+                        
+                        with col2:
+                            st.markdown("### 📉 Bearish Targets")
+                            bear_targets = targets['bearish_targets']
+                            for i, (target, prob) in enumerate(zip([bear_targets['target_1'], bear_targets['target_2'], bear_targets['target_3']], 
+                                                                 bear_targets['probabilities']), 1):
+                                distance = ((target / prediction_result['current_price']) - 1) * 100
+                                st.write(f"**T{i}:** ${target:.2f} ({distance:.1f}%) - {prob:.0%} probability")
+                        
+                        # Risk Assessment
+                        if overall['key_risks']:
+                            st.subheader("⚠️ Key Risks")
+                            for risk in overall['key_risks']:
+                                st.warning(f"• {risk}")
+                        
+                        # Trading Recommendations
+                        st.subheader("💡 Trading Recommendations")
+                        
+                        if overall['direction'] == 'BULLISH':
+                            st.success("""
+                            **Bullish Outlook Strategies:**
+                            • Consider **Bull Call Spreads** for moderate upside
+                            • **Cash Secured Puts** to enter on pullbacks
+                            • **Covered Calls** if already holding stock
+                            • Set stop loss around recent support levels
+                            """)
+                        elif overall['direction'] == 'BEARISH':
+                            st.error("""
+                            **Bearish Outlook Strategies:**
+                            • Consider **Bear Put Spreads** for moderate downside
+                            • **Protective Puts** if holding stock
+                            • Avoid **Covered Calls** in strong downtrends
+                            • Wait for oversold bounces to enter short positions
+                            """)
+                        else:
+                            st.info("""
+                            **Neutral Outlook Strategies:**
+                            • **Iron Condors** for range-bound trading
+                            • **Covered Calls** for income generation
+                            • **Cash Secured Puts** at support levels
+                            • Avoid directional bets until clearer signals emerge
+                            """)
+                        
+                        # Export Prediction
+                        st.subheader("📤 Export Prediction")
+                        
+                        prediction_export = {
+                            'prediction_timestamp': datetime.now().isoformat(),
+                            'ticker': prediction_result['ticker'],
+                            'current_price': prediction_result['current_price'],
+                            'prediction_period_days': prediction_days,
+                            'overall_prediction': prediction_result['overall_prediction'],
+                            'technical_signals': prediction_result['technical_signals'],
+                            'volatility_forecast': prediction_result['volatility_forecast'],
+                            'price_targets': prediction_result['price_targets']
+                        }
+                        
+                        st.download_button(
+                            "🔮 Download Prediction Report",
+                            json.dumps(prediction_export, indent=2),
+                            f"{prediction_result['ticker']}_market_prediction.json",
+                            "application/json"
+                        )
+                    
+                    else:
+                        st.error(f"❌ Prediction failed: {prediction_result['error']}")
+                
+                except Exception as e:
+                    st.error(f"❌ Prediction error: {str(e)}")
+                    if debug_mode:
+                        import traceback
+                        st.code(traceback.format_exc())
+        
+        else:
+            # Instructions for Predictions tab
+            st.markdown("""
+            ## 🔮 Market Predictions
+            
+            **AI-powered market direction prediction** using advanced technical analysis, volatility forecasting, and momentum indicators.
+            
+            ### 🎯 **Prediction Components:**
+            
+            **🔧 Technical Analysis:**
+            - **RSI Momentum:** Overbought/oversold conditions
+            - **Moving Averages:** Trend direction and strength
+            - **MACD Signals:** Momentum crossovers and divergences
+            - **Support/Resistance:** Key price levels to watch
+            
+            **📊 Volatility Forecasting:**
+            - **Current vs Historical:** Volatility regime analysis
+            - **GARCH-style Modeling:** Mean reversion forecasting
+            - **Volatility Trends:** Increasing or decreasing patterns
+            - **Risk Assessment:** Market uncertainty levels
+            
+            **🎯 Price Target Analysis:**
+            - **ATR-based Targets:** Volatility-adjusted price levels
+            - **Fibonacci Retracements:** Mathematical support/resistance
+            - **Bollinger Bands:** Dynamic overbought/oversold levels
+            - **Probability Estimates:** Likelihood of reaching targets
+            
+            **🌊 Momentum Indicators:**
+            - **Rate of Change:** Multi-timeframe momentum
+            - **Volume Analysis:** Confirmation of price moves
+            - **Recent Highs/Lows:** Short-term momentum patterns
+            - **Trend Strength:** Sustainability of current moves
+            
+            ### 📈 **Prediction Output:**
+            
+            **🎯 Overall Direction:**
+            - **Bullish/Bearish/Neutral** with confidence percentages
+            - **Time Horizon:** Short/Medium/Long-term outlook
+            - **Signal Strength:** Very High/High/Moderate/Low
+            - **Risk Assessment:** Key factors to monitor
+            
+            **📊 Detailed Analysis:**
+            - **Support/Resistance Levels** with distance calculations
+            - **Price Targets** with probability estimates
+            - **Volatility Forecasts** for options strategies
+            - **Trading Recommendations** based on prediction
+            
+            ### 💡 **How to Use:**
+            1. **Enter symbol** (auto-populated from Analysis tab)
+            2. **Set prediction horizon** (7-90 days)
+            3. **Generate prediction** using real market data
+            4. **Analyze components** to understand the forecast
+            5. **Apply to trading** using strategy recommendations
+            
+            ### 🎯 **Strategy Integration:**
+            - **Bullish Predictions:** Bull spreads, cash-secured puts
+            - **Bearish Predictions:** Bear spreads, protective puts
+            - **Neutral Predictions:** Iron condors, covered calls
+            - **High Volatility:** Premium selling strategies
+            - **Low Volatility:** Long volatility strategies
+            
+            ### ⚠️ **Important Disclaimers:**
+            - **Predictions are probabilistic** - not guaranteed outcomes
+            - **Based on technical analysis** - fundamental factors not included
+            - **For educational purposes** - not investment advice
+            - **Past patterns** may not predict future performance
+            - **Always use proper risk management**
+            
+            ### 🔬 **Technical Methodology:**
+            - **Multi-factor scoring** system combining all indicators
+            - **Confidence intervals** based on signal alignment
+            - **Historical backtesting** of prediction accuracy
+            - **Real-time data integration** from Polygon API
+            - **Professional-grade algorithms** used by institutions
             """)
 
 
