@@ -234,8 +234,8 @@ class MultiAssetOptionsStrategist:
             return f"{prefix}{ticker}"
         return ticker
 
-    def create_trading_chart(self, data: Dict, asset_class: str) -> go.Figure:
-        """Create trading chart adapted for different asset classes"""
+    def create_trading_chart(self, data: Dict, asset_class: str, support_resistance: Dict = None) -> go.Figure:
+        """Create trading chart adapted for different asset classes with enhanced SMAs and S/R levels"""
         try:
             df = data['historical_data'].copy()
             
@@ -276,7 +276,7 @@ class MultiAssetOptionsStrategist:
                     )
                 )
                 
-                fig.update_layout(height=500)
+                fig.update_layout(height=600)
                 
             else:
                 # Stocks/Indices with volume
@@ -319,14 +319,20 @@ class MultiAssetOptionsStrategist:
                         row=2, col=1
                     )
                 
-                fig.update_layout(height=600)
+                fig.update_layout(height=700)
             
-            # Moving averages for all asset classes
-            colors = ['#ff6b35', '#004e89', '#7209b7']
-            ma_periods = [20, 50, 200]
-            ma_names = ['SMA 20', 'SMA 50', 'SMA 200']
+            # Enhanced Moving averages - Professional set
+            sma_configs = [
+                {'period': 20, 'color': '#ff6b35', 'name': 'SMA 20', 'width': 2},
+                {'period': 40, 'color': '#f7931e', 'name': 'SMA 40', 'width': 2},
+                {'period': 50, 'color': '#004e89', 'name': 'SMA 50', 'width': 2.5},
+                {'period': 100, 'color': '#7209b7', 'name': 'SMA 100', 'width': 2},
+                {'period': 150, 'color': '#c1272d', 'name': 'SMA 150', 'width': 2},
+                {'period': 200, 'color': '#ffffff', 'name': 'SMA 200', 'width': 3}
+            ]
             
-            for period, color, name in zip(ma_periods, colors, ma_names):
+            for sma_config in sma_configs:
+                period = sma_config['period']
                 if len(df_last_year) >= period:
                     ma = df_last_year['close'].rolling(window=period).mean()
                     fig.add_trace(
@@ -334,9 +340,81 @@ class MultiAssetOptionsStrategist:
                             x=df_last_year.index,
                             y=ma,
                             mode='lines',
-                            name=name,
-                            line=dict(color=color, width=2)
+                            name=sma_config['name'],
+                            line=dict(
+                                color=sma_config['color'], 
+                                width=sma_config['width'],
+                                dash='solid' if period in [20, 50, 200] else 'dot'
+                            ),
+                            opacity=0.9 if period in [20, 50, 200] else 0.7
                         ),
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+            
+            # Add Support and Resistance levels if provided
+            if support_resistance:
+                # Support level
+                if 'support_level' in support_resistance:
+                    support = support_resistance['support_level']
+                    fig.add_hline(
+                        y=support,
+                        line_dash="dash",
+                        line_color="#00ff00",
+                        line_width=2,
+                        annotation_text=f"Support: {support:.4f if asset_class == 'FOREX' else f'${support:.2f}'}",
+                        annotation_position="bottom left",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                # Resistance level
+                if 'resistance_level' in support_resistance:
+                    resistance = support_resistance['resistance_level']
+                    fig.add_hline(
+                        y=resistance,
+                        line_dash="dash",
+                        line_color="#ff0000",
+                        line_width=2,
+                        annotation_text=f"Resistance: {resistance:.4f if asset_class == 'FOREX' else f'${resistance:.2f}'}",
+                        annotation_position="top left",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                # Target price (from predictions)
+                if 'target_price' in support_resistance:
+                    target = support_resistance['target_price']
+                    fig.add_hline(
+                        y=target,
+                        line_dash="dot",
+                        line_color="#ffff00",
+                        line_width=2,
+                        annotation_text=f"Target: {target:.4f if asset_class == 'FOREX' else f'${target:.2f}'}",
+                        annotation_position="top right",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                # Bull case
+                if 'bull_case' in support_resistance:
+                    bull = support_resistance['bull_case']
+                    fig.add_hline(
+                        y=bull,
+                        line_dash="dot",
+                        line_color="#00ffff",
+                        line_width=1.5,
+                        annotation_text=f"Bull: {bull:.4f if asset_class == 'FOREX' else f'${bull:.2f}'}",
+                        annotation_position="top right",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                # Bear case
+                if 'bear_case' in support_resistance:
+                    bear = support_resistance['bear_case']
+                    fig.add_hline(
+                        y=bear,
+                        line_dash="dot",
+                        line_color="#ff00ff",
+                        line_width=1.5,
+                        annotation_text=f"Bear: {bear:.4f if asset_class == 'FOREX' else f'${bear:.2f}'}",
+                        annotation_position="bottom right",
                         row=1, col=1 if asset_class != 'FOREX' else None
                     )
             
@@ -347,15 +425,23 @@ class MultiAssetOptionsStrategist:
                 xaxis_rangeslider_visible=False,
                 template='plotly_dark',
                 plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
+                paper_bgcolor='rgba(0,0,0,0)',
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
             )
             
             # Add current price annotation
             current_price = data['current_price']
             fig.add_hline(
                 y=current_price,
-                line_dash="dash",
+                line_dash="solid",
                 line_color="white",
+                line_width=2,
                 annotation_text=price_annotation,
                 annotation_position="bottom right",
                 row=1, col=1 if asset_class != 'FOREX' else None
@@ -367,6 +453,233 @@ class MultiAssetOptionsStrategist:
             print(f"Error creating {asset_class} chart: {e}")
             return go.Figure().add_annotation(
                 text=f"{asset_class} chart could not be generated",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False
+            )
+    
+    def create_enhanced_trading_chart(self, data: Dict, asset_class: str, support_resistance: Dict = None, sma_config: Dict = None) -> go.Figure:
+        """Create enhanced trading chart with configurable SMAs and S/R levels"""
+        try:
+            df = data['historical_data'].copy()
+            
+            # Asset-specific chart customizations
+            if asset_class == 'FOREX':
+                chart_title = f'{data["ticker"]} - FX Pair (Last Year)'
+                price_annotation = f"Current: {data['current_price']:.5f}"
+            else:
+                df = df[df.index.dayofweek < 5]
+                chart_title = f'{data["ticker"]} - {asset_class} (Last Year)'
+                price_annotation = f"Current: ${data['current_price']:.2f}"
+            
+            # Get last year of data
+            one_year_ago = datetime.now() - timedelta(days=365)
+            df_last_year = df[df.index >= one_year_ago]
+            
+            if len(df_last_year) < 50:
+                df_last_year = df
+            
+            # Create subplot structure
+            if asset_class == 'FOREX':
+                fig = go.Figure()
+                fig.add_trace(
+                    go.Candlestick(
+                        x=df_last_year.index,
+                        open=df_last_year['open'],
+                        high=df_last_year['high'],
+                        low=df_last_year['low'],
+                        close=df_last_year['close'],
+                        name='Price',
+                        increasing_line_color='#00ff88',
+                        decreasing_line_color='#ff4444'
+                    )
+                )
+                fig.update_layout(height=700)
+            else:
+                fig = make_subplots(
+                    rows=2, cols=1,
+                    shared_xaxes=True,
+                    vertical_spacing=0.1,
+                    subplot_titles=(chart_title, 'Volume'),
+                    row_heights=[0.7, 0.3]
+                )
+                
+                fig.add_trace(
+                    go.Candlestick(
+                        x=df_last_year.index,
+                        open=df_last_year['open'],
+                        high=df_last_year['high'],
+                        low=df_last_year['low'],
+                        close=df_last_year['close'],
+                        name='Price',
+                        increasing_line_color='#00ff88',
+                        decreasing_line_color='#ff4444'
+                    ),
+                    row=1, col=1
+                )
+                
+                if 'volume' in df_last_year.columns:
+                    colors = ['#ff4444' if close < open else '#00ff88' 
+                             for open, close in zip(df_last_year['open'], df_last_year['close'])]
+                    
+                    fig.add_trace(
+                        go.Bar(
+                            x=df_last_year.index,
+                            y=df_last_year['volume'],
+                            name='Volume',
+                            marker_color=colors,
+                            opacity=0.7
+                        ),
+                        row=2, col=1
+                    )
+                
+                fig.update_layout(height=800)
+            
+            # Configurable Moving Averages
+            sma_configs = [
+                {'period': 20, 'color': '#ff6b35', 'name': 'SMA 20', 'width': 2, 'show': sma_config.get('show_sma_20', True)},
+                {'period': 40, 'color': '#f7931e', 'name': 'SMA 40', 'width': 2, 'show': sma_config.get('show_sma_40', True)},
+                {'period': 50, 'color': '#004e89', 'name': 'SMA 50', 'width': 2.5, 'show': sma_config.get('show_sma_50', True)},
+                {'period': 100, 'color': '#7209b7', 'name': 'SMA 100', 'width': 2, 'show': sma_config.get('show_sma_100', True)},
+                {'period': 150, 'color': '#c1272d', 'name': 'SMA 150', 'width': 2, 'show': sma_config.get('show_sma_150', True)},
+                {'period': 200, 'color': '#ffffff', 'name': 'SMA 200', 'width': 3, 'show': sma_config.get('show_sma_200', True)}
+            ]
+            
+            for sma_config_item in sma_configs:
+                if sma_config_item['show'] and len(df_last_year) >= sma_config_item['period']:
+                    ma = df_last_year['close'].rolling(window=sma_config_item['period']).mean()
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_last_year.index,
+                            y=ma,
+                            mode='lines',
+                            name=sma_config_item['name'],
+                            line=dict(
+                                color=sma_config_item['color'], 
+                                width=sma_config_item['width'],
+                                dash='solid' if sma_config_item['period'] in [20, 50, 200] else 'dot'
+                            ),
+                            opacity=0.9 if sma_config_item['period'] in [20, 50, 200] else 0.7
+                        ),
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+            
+            # Add Support and Resistance levels
+            if support_resistance:
+                if 'support_level' in support_resistance:
+                    support = support_resistance['support_level']
+                    fig.add_hline(
+                        y=support,
+                        line_dash="dash",
+                        line_color="#00ff00",
+                        line_width=2,
+                        annotation_text=f"Support: {support:.4f if asset_class == 'FOREX' else f'${support:.2f}'}",
+                        annotation_position="bottom left",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                if 'resistance_level' in support_resistance:
+                    resistance = support_resistance['resistance_level']
+                    fig.add_hline(
+                        y=resistance,
+                        line_dash="dash",
+                        line_color="#ff0000",
+                        line_width=2,
+                        annotation_text=f"Resistance: {resistance:.4f if asset_class == 'FOREX' else f'${resistance:.2f}'}",
+                        annotation_position="top left",
+                        row=1, col=1 if asset_class != 'FOREX' else None
+                    )
+                
+                # Prediction levels
+                for level_name, color, position in [
+                    ('target_price', '#ffff00', 'top right'),
+                    ('bull_case', '#00ffff', 'top right'),
+                    ('bear_case', '#ff00ff', 'bottom right')
+                ]:
+                    if level_name in support_resistance:
+                        level_value = support_resistance[level_name]
+                        fig.add_hline(
+                            y=level_value,
+                            line_dash="dot",
+                            line_color=color,
+                            line_width=1.5,
+                            annotation_text=f"{level_name.replace('_', ' ').title()}: {level_value:.4f if asset_class == 'FOREX' else f'${level_value:.2f}'}",
+                            annotation_position=position,
+                            row=1, col=1 if asset_class != 'FOREX' else None
+                        )
+            
+            # Current price line (configurable)
+            if sma_config.get('show_current_price', True):
+                current_price = data['current_price']
+                fig.add_hline(
+                    y=current_price,
+                    line_dash="solid",
+                    line_color="white",
+                    line_width=2,
+                    annotation_text=price_annotation,
+                    annotation_position="bottom right",
+                    row=1, col=1 if asset_class != 'FOREX' else None
+                )
+            
+            # Update layout
+            fig.update_layout(
+                title=chart_title,
+                showlegend=True,
+                xaxis_rangeslider_visible=False,
+                template='plotly_dark',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
+            
+            return fig
+            
+        except Exception as e:
+            print(f"Error creating enhanced {asset_class} chart: {e}")
+            return go.Figure().add_annotation(
+                text=f"Enhanced {asset_class} chart could not be generated",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False
+            )
+    
+    def create_technical_analysis_chart(self, ticker: str, asset_class: str, prediction_data: Dict = None) -> go.Figure:
+        """Create a dedicated technical analysis chart with all SMAs and prediction levels"""
+        try:
+            # Get underlying data
+            underlying_data = self.get_asset_data(ticker, asset_class, days=365)
+            
+            chart_data = {
+                'ticker': ticker,
+                'current_price': underlying_data['current_price'],
+                'historical_data': underlying_data['historical_data']
+            }
+            
+            # Prepare support/resistance levels
+            support_resistance = {
+                'support_level': underlying_data['low_52w'],
+                'resistance_level': underlying_data['high_52w']
+            }
+            
+            # Add prediction levels if available
+            if prediction_data and 'price_predictions' in prediction_data:
+                predictions = prediction_data['price_predictions']
+                support_resistance.update({
+                    'target_price': predictions.get('target_price'),
+                    'bull_case': predictions.get('bull_case'),
+                    'bear_case': predictions.get('bear_case')
+                })
+            
+            return self.create_trading_chart(chart_data, asset_class, support_resistance)
+            
+        except Exception as e:
+            print(f"Error creating technical analysis chart: {e}")
+            return go.Figure().add_annotation(
+                text=f"Technical chart could not be generated",
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, showarrow=False
             )
@@ -681,6 +994,89 @@ class MultiAssetOptionsStrategist:
         except Exception as e:
             print(f"❌ Failed to get options data for {underlying_ticker}: {str(e)}")
             raise
+    
+    def get_options_data_with_expiry(self, underlying_ticker: str, asset_class: str, current_price: float = None, start_date=None, end_date=None) -> Dict:
+        """Get options data for specific expiry date range"""
+        try:
+            print(f"🎯 Fetching options data for {underlying_ticker} ({asset_class}) between {start_date} and {end_date}...")
+            
+            # Options contracts use original ticker (not formatted)
+            contracts = []
+            for contract in self.client.list_options_contracts(
+                underlying_ticker=underlying_ticker,
+                expiration_date_gte=start_date.strftime("%Y-%m-%d"),
+                expiration_date_lte=end_date.strftime("%Y-%m-%d"),
+                limit=1000
+            ):
+                contracts.append(contract)
+            
+            if not contracts:
+                raise ValueError(f"No options contracts found for {underlying_ticker} between {start_date} and {end_date}")
+            
+            print(f"Found {len(contracts)} options contracts for selected expiry range")
+            
+            # Get current underlying price if not provided
+            if current_price is None:
+                try:
+                    end_date_fetch = datetime.now()
+                    start_date_fetch = end_date_fetch - timedelta(days=5)
+                    formatted_ticker = self._format_ticker(underlying_ticker, asset_class)
+                    
+                    recent_aggs = []
+                    for agg in self.client.list_aggs(
+                        formatted_ticker,
+                        1,
+                        "day",
+                        start_date_fetch.strftime("%Y-%m-%d"),
+                        end_date_fetch.strftime("%Y-%m-%d"),
+                        limit=5
+                    ):
+                        if hasattr(agg, 'close') and agg.close is not None:
+                            recent_aggs.append(agg)
+                    
+                    if recent_aggs:
+                        current_price = float(recent_aggs[-1].close)
+                        print(f"💰 Current price for options: {current_price}")
+                    else:
+                        raise ValueError("Could not get current price")
+                        
+                except Exception as e:
+                    raise ValueError(f"Could not get current price for {underlying_ticker}: {e}")
+            
+            # Process contracts
+            options_data = self._process_real_options_contracts(contracts, current_price, underlying_ticker, asset_class)
+            
+            return options_data
+            
+        except Exception as e:
+            print(f"❌ Failed to get options data for {underlying_ticker}: {str(e)}")
+            raise
+
+    def _get_available_expiries(self, ticker: str, asset_class: str) -> List[str]:
+        """Get all available expiration dates for a symbol"""
+        try:
+            contracts = []
+            # Get more contracts to see all available expiries
+            for contract in self.client.list_options_contracts(
+                underlying_ticker=ticker,
+                expiration_date_gte=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
+                expiration_date_lte=(datetime.now() + timedelta(days=1800)).strftime("%Y-%m-%d"),  # ~5 years
+                limit=2000
+            ):
+                contracts.append(contract)
+            
+            # Extract unique expiration dates
+            expiries = set()
+            for contract in contracts:
+                expiries.add(contract.expiration_date)
+            
+            # Sort expiries
+            sorted_expiries = sorted(list(expiries))
+            return sorted_expiries[:20]  # Return first 20 expiries
+            
+        except Exception as e:
+            print(f"Could not get available expiries: {e}")
+            return []
     
     def _process_real_options_contracts(self, contracts: List, current_price: float, underlying_ticker: str, asset_class: str) -> Dict:
         """Process options contracts with asset-specific considerations"""
@@ -2002,6 +2398,53 @@ class MultiAssetOptionsStrategist:
         except Exception as e:
             print(f"❌ Failed to calculate {asset_class} Greeks for {ticker}: {str(e)}")
             raise
+
+    def get_options_greeks_with_expiry(self, ticker: str, asset_class: str, expiry_code: str, start_date, end_date) -> Dict:
+        """Calculate options Greeks for specific expiry period"""
+        try:
+            print(f"🔢 Calculating {asset_class} Greeks for {ticker} ({expiry_code})...")
+            
+            # Get current price
+            underlying_data = self.get_asset_data(ticker, asset_class, days=30)
+            current_price = underlying_data['current_price']
+            
+            # Get options data for specific expiry range
+            options_data = self.get_options_data_with_expiry(ticker, asset_class, current_price, start_date, end_date)
+            calls_df = options_data['calls']
+            puts_df = options_data['puts']
+            
+            if calls_df.empty and puts_df.empty:
+                raise ValueError(f"No options data available for {expiry_code} expiry")
+            
+            # Calculate Greeks for calls
+            calls_greeks = self._calculate_greeks_for_options(calls_df, current_price, options_data['days_to_expiry'], 'call', asset_class)
+            
+            # Calculate Greeks for puts
+            puts_greeks = self._calculate_greeks_for_options(puts_df, current_price, options_data['days_to_expiry'], 'put', asset_class)
+            
+            # Summary statistics
+            summary_stats = self._calculate_greeks_summary(calls_greeks, puts_greeks, current_price)
+            
+            # Get all available expiries for this symbol
+            available_expiries = self._get_available_expiries(ticker, asset_class)
+            
+            return {
+                'underlying_ticker': ticker,
+                'underlying_price': current_price,
+                'asset_class': asset_class,
+                'expiry_code': expiry_code,
+                'expiration': options_data['expiration'],
+                'days_to_expiry': options_data['days_to_expiry'],
+                'calls_greeks': calls_greeks,
+                'puts_greeks': puts_greeks,
+                'summary_stats': summary_stats,
+                'total_contracts': len(calls_greeks) + len(puts_greeks),
+                'available_expiries': available_expiries
+            }
+            
+        except Exception as e:
+            print(f"❌ Failed to calculate {asset_class} Greeks for {ticker} ({expiry_code}): {str(e)}")
+            raise
     
     def _calculate_greeks_for_options(self, options_df: pd.DataFrame, underlying_price: float, 
                                      days_to_expiry: int, option_type: str, asset_class: str) -> pd.DataFrame:
@@ -2128,136 +2571,6 @@ class MultiAssetOptionsStrategist:
                 summary['avg_implied_vol'] = all_greeks['implied_vol'].mean()
         
         return summary
-    
-    def get_options_greeks_with_expiry(self, ticker: str, asset_class: str, expiry_code: str, start_date, end_date) -> Dict:
-        """Calculate options Greeks for specific expiry period"""
-        try:
-            print(f"🔢 Calculating {asset_class} Greeks for {ticker} ({expiry_code})...")
-            
-            # Get current price
-            underlying_data = self.get_asset_data(ticker, asset_class, days=30)
-            current_price = underlying_data['current_price']
-            
-            # Get options data for specific expiry range
-            options_data = self.get_options_data_with_expiry(ticker, asset_class, current_price, start_date, end_date)
-            calls_df = options_data['calls']
-            puts_df = options_data['puts']
-            
-            if calls_df.empty and puts_df.empty:
-                raise ValueError(f"No options data available for {expiry_code} expiry")
-            
-            # Calculate Greeks for calls
-            calls_greeks = self._calculate_greeks_for_options(calls_df, current_price, options_data['days_to_expiry'], 'call', asset_class)
-            
-            # Calculate Greeks for puts
-            puts_greeks = self._calculate_greeks_for_options(puts_df, current_price, options_data['days_to_expiry'], 'put', asset_class)
-            
-            # Summary statistics
-            summary_stats = self._calculate_greeks_summary(calls_greeks, puts_greeks, current_price)
-            
-            # Get all available expiries for this symbol
-            available_expiries = self._get_available_expiries(ticker, asset_class)
-            
-            return {
-                'underlying_ticker': ticker,
-                'underlying_price': current_price,
-                'asset_class': asset_class,
-                'expiry_code': expiry_code,
-                'expiration': options_data['expiration'],
-                'days_to_expiry': options_data['days_to_expiry'],
-                'calls_greeks': calls_greeks,
-                'puts_greeks': puts_greeks,
-                'summary_stats': summary_stats,
-                'total_contracts': len(calls_greeks) + len(puts_greeks),
-                'available_expiries': available_expiries
-            }
-            
-        except Exception as e:
-            print(f"❌ Failed to calculate {asset_class} Greeks for {ticker} ({expiry_code}): {str(e)}")
-            raise
-
-    def get_options_data_with_expiry(self, underlying_ticker: str, asset_class: str, current_price: float = None, start_date=None, end_date=None) -> Dict:
-        """Get options data for specific expiry date range"""
-        try:
-            print(f"🎯 Fetching options data for {underlying_ticker} ({asset_class}) between {start_date} and {end_date}...")
-            
-            # Options contracts use original ticker (not formatted)
-            contracts = []
-            for contract in self.client.list_options_contracts(
-                underlying_ticker=underlying_ticker,
-                expiration_date_gte=start_date.strftime("%Y-%m-%d"),
-                expiration_date_lte=end_date.strftime("%Y-%m-%d"),
-                limit=1000
-            ):
-                contracts.append(contract)
-            
-            if not contracts:
-                raise ValueError(f"No options contracts found for {underlying_ticker} between {start_date} and {end_date}")
-            
-            print(f"Found {len(contracts)} options contracts for selected expiry range")
-            
-            # Get current underlying price if not provided
-            if current_price is None:
-                try:
-                    end_date_fetch = datetime.now()
-                    start_date_fetch = end_date_fetch - timedelta(days=5)
-                    formatted_ticker = self._format_ticker(underlying_ticker, asset_class)
-                    
-                    recent_aggs = []
-                    for agg in self.client.list_aggs(
-                        formatted_ticker,
-                        1,
-                        "day",
-                        start_date_fetch.strftime("%Y-%m-%d"),
-                        end_date_fetch.strftime("%Y-%m-%d"),
-                        limit=5
-                    ):
-                        if hasattr(agg, 'close') and agg.close is not None:
-                            recent_aggs.append(agg)
-                    
-                    if recent_aggs:
-                        current_price = float(recent_aggs[-1].close)
-                        print(f"💰 Current price for options: {current_price}")
-                    else:
-                        raise ValueError("Could not get current price")
-                        
-                except Exception as e:
-                    raise ValueError(f"Could not get current price for {underlying_ticker}: {e}")
-            
-            # Process contracts
-            options_data = self._process_real_options_contracts(contracts, current_price, underlying_ticker, asset_class)
-            
-            return options_data
-            
-        except Exception as e:
-            print(f"❌ Failed to get options data for {underlying_ticker}: {str(e)}")
-            raise
-
-    def _get_available_expiries(self, ticker: str, asset_class: str) -> List[str]:
-        """Get all available expiration dates for a symbol"""
-        try:
-            contracts = []
-            # Get more contracts to see all available expiries
-            for contract in self.client.list_options_contracts(
-                underlying_ticker=ticker,
-                expiration_date_gte=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
-                expiration_date_lte=(datetime.now() + timedelta(days=1800)).strftime("%Y-%m-%d"),  # ~5 years
-                limit=2000
-            ):
-                contracts.append(contract)
-            
-            # Extract unique expiration dates
-            expiries = set()
-            for contract in contracts:
-                expiries.add(contract.expiration_date)
-            
-            # Sort expiries
-            sorted_expiries = sorted(list(expiries))
-            return sorted_expiries[:20]  # Return first 20 expiries
-            
-        except Exception as e:
-            print(f"Could not get available expiries: {e}")
-            return []
     
     def run_strategy_backtest(self, ticker: str, asset_class: str, strategy: str, 
                              start_date: datetime, end_date: datetime, params: Dict) -> Dict:
@@ -2749,6 +3062,7 @@ class MultiAssetOptionsStrategist:
                 'asset_class': asset_class,
                 'current_price': current_price,
                 'prediction_days': prediction_days,
+                'historical_data': df,  # Include historical data for charting
                 'technical_signals': technical_signals,
                 'sentiment_analysis': sentiment_analysis,
                 'asset_specific_analysis': asset_specific_analysis,
@@ -3538,7 +3852,7 @@ def main():
             if hasattr(st.session_state, 'selected_symbol'):
                 test_symbol = st.session_state.selected_symbol
             else:
-                test_symbol = popular_symbols[0] if popular_symbols else 'EWU'
+                test_symbol = popular_symbols[0] if popular_symbols else 'SPY'
             
             with st.spinner(f"Testing {test_symbol} data..."):
                 try:
@@ -3563,7 +3877,7 @@ def main():
             if hasattr(st.session_state, 'selected_symbol'):
                 test_symbol = st.session_state.selected_symbol
             else:
-                test_symbol = popular_symbols[0] if popular_symbols else 'EWU'
+                test_symbol = popular_symbols[0] if popular_symbols else 'SPY'
             
             with st.spinner(f"Checking {test_symbol} options..."):
                 try:
@@ -3584,7 +3898,7 @@ def main():
         
         # Default symbol based on asset class
         default_symbols = {
-            'INDICES': 'EWU',
+            'INDICES': 'SPY',
             'EQUITIES': 'AAPL', 
             'FOREX': 'EURUSD'
         }
@@ -3613,7 +3927,6 @@ def main():
             disabled=not symbol_input
         )
 
-    # Tab 1: Enhanced Analysis with Explanations and Contract Recommendations
     # Tab 1: Enhanced Analysis with Explanations and Contract Recommendations
     with tab1:
         # Handle analysis button click
@@ -3677,481 +3990,628 @@ def main():
                     else:
                         st.metric("Market", "24/5 Trading")
                 
-                # Trading Chart
-                st.subheader(f"📈 {asset_class} Trading Chart")
+                # Trading Chart with Professional Technical Analysis
+                # Trading Chart with Professional Technical Analysis
+                st.subheader(f"📈 {asset_class} Professional Trading Chart")
+                
+                # Chart configuration options
+                with st.expander("⚙️ Chart Configuration", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**📊 Moving Averages:**")
+                        show_sma_20 = st.checkbox("SMA 20", value=True, key=f"sma20_{result['ticker']}")
+                        show_sma_40 = st.checkbox("SMA 40", value=True, key=f"sma40_{result['ticker']}")
+                        show_sma_50 = st.checkbox("SMA 50", value=True, key=f"sma50_{result['ticker']}")
+                    
+                    with col2:
+                        st.markdown("**📈 Long-term SMAs:**")
+                        show_sma_100 = st.checkbox("SMA 100", value=True, key=f"sma100_{result['ticker']}")
+                        show_sma_150 = st.checkbox("SMA 150", value=True, key=f"sma150_{result['ticker']}")
+                        show_sma_200 = st.checkbox("SMA 200", value=True, key=f"sma200_{result['ticker']}")
+                    
+                    with col3:
+                        st.markdown("**🎯 Support/Resistance:**")
+                        show_support = st.checkbox("52W Low (Support)", value=True, key=f"support_{result['ticker']}")
+                        show_resistance = st.checkbox("52W High (Resistance)", value=True, key=f"resistance_{result['ticker']}")
+                        show_current = st.checkbox("Current Price Line", value=True, key=f"current_{result['ticker']}")
+                
                 try:
                     chart_data = {
                         'ticker': underlying['ticker'],
                         'current_price': underlying['current_price'],
                         'historical_data': underlying['historical_data']
                     }
-                    chart = strategist.create_trading_chart(chart_data, asset_class)
+                    
+                    # Configure support/resistance levels based on user selection
+                    support_resistance = {}
+                    if show_support:
+                        support_resistance['support_level'] = underlying['low_52w']
+                    if show_resistance:
+                        support_resistance['resistance_level'] = underlying['high_52w']
+                    
+                    # Pass SMA configuration to chart
+                    sma_config = {
+                        'show_sma_20': show_sma_20,
+                        'show_sma_40': show_sma_40,
+                        'show_sma_50': show_sma_50,
+                        'show_sma_100': show_sma_100,
+                        'show_sma_150': show_sma_150,
+                        'show_sma_200': show_sma_200,
+                        'show_current_price': show_current
+                    }
+                    
+                    chart = strategist.create_enhanced_trading_chart(chart_data, asset_class, support_resistance, sma_config)
                     st.plotly_chart(chart, use_container_width=True)
+                    
+                    # Technical Analysis Summary
+                    st.markdown("### 📊 Technical Analysis Summary")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.markdown("**📈 Moving Average Analysis:**")
+                        current_price = underlying['current_price']
+                        sma_20 = underlying.get('sma_20', current_price)
+                        sma_50 = underlying.get('sma_50', current_price)
+                        sma_200 = underlying.get('sma_200', current_price)
+                        
+                        if current_price > sma_20 > sma_50 > sma_200:
+                            st.success("🟢 **Bullish Alignment** - All SMAs trending up")
+                        elif current_price < sma_20 < sma_50 < sma_200:
+                            st.error("🔴 **Bearish Alignment** - All SMAs trending down")  
+                        else:
+                            st.warning("🟡 **Mixed Signals** - SMAs showing conflicting trends")
+                    
+                    with col2:
+                        st.markdown("**🎯 Support/Resistance:**")
+                        distance_to_support = ((current_price - underlying['low_52w']) / underlying['low_52w']) * 100
+                        distance_to_resistance = ((underlying['high_52w'] - current_price) / current_price) * 100
+                        
+                        st.metric("Distance to Support", f"{distance_to_support:.1f}%")
+                        st.metric("Distance to Resistance", f"{distance_to_resistance:.1f}%")
+                    
+                    with col3:
+                        st.markdown("**📊 Position in Range:**")
+                        range_position = ((current_price - underlying['low_52w']) / (underlying['high_52w'] - underlying['low_52w'])) * 100
+                        
+                        if range_position > 80:
+                            st.error(f"🔴 **Near High** ({range_position:.0f}% of range)")
+                        elif range_position < 20:
+                            st.success(f"🟢 **Near Low** ({range_position:.0f}% of range)")
+                        else:
+                            st.info(f"🟡 **Mid-Range** ({range_position:.0f}% of range)")
+                            
                 except Exception as e:
                     st.error(f"Could not create {asset_class} chart: {str(e)}")
                 
-                # Market Analysis
-                st.subheader("📈 Market Analysis")
-                col1, col2, col3 = st.columns(3)
+                # Market Conditions Analysis
+                st.subheader(f"🌡️ {asset_class} Market Conditions")
+                
+                col1, col2 = st.columns(2)
                 
                 with col1:
-                    trend_color = "🟢" if "BULLISH" in analysis['trend'] else "🔴" if "BEARISH" in analysis['trend'] else "🟡"
-                    st.metric("Trend", f"{trend_color} {analysis['trend']}")
-                    st.metric("Trend Strength", f"{analysis['trend_strength']:.2f}")
+                    st.markdown("**📊 Current Market State:**")
+                    
+                    # Trend
+                    trend_color = {
+                        'STRONG_BULLISH': '🟢',
+                        'BULLISH': '🟢',
+                        'SIDEWAYS_BULLISH': '🟡',
+                        'SIDEWAYS': '🟡',
+                        'SIDEWAYS_BEARISH': '🟡',
+                        'BEARISH': '🔴',
+                        'STRONG_BEARISH': '🔴'
+                    }.get(analysis['trend'], '⚪')
+                    
+                    st.write(f"{trend_color} **Trend:** {analysis['trend'].replace('_', ' ').title()}")
+                    st.write(f"📊 **Strength:** {analysis['trend_strength']:.1f}%")
+                    
+                    # Volatility
+                    vol_color = {
+                        'LOW_VOL': '🟢',
+                        'NORMAL_VOL': '🟡',
+                        'HIGH_VOL': '🟠',
+                        'EXTREME_VOL': '🔴'
+                    }.get(analysis['volatility_regime'], '⚪')
+                    
+                    st.write(f"{vol_color} **Volatility:** {analysis['volatility_regime'].replace('_', ' ').title()}")
+                    st.write(f"📈 **21-Day Vol:** {analysis['realized_vol']:.1%}")
                 
                 with col2:
-                    vol_color = "🔴" if analysis['volatility_regime'] in ['HIGH_VOL', 'EXTREME_VOL'] else "🟢"
-                    st.metric("Volatility", f"{vol_color} {analysis['volatility_regime']}")
-                    st.metric("BB Position", f"{analysis['bb_position']:.1f}%")
+                    st.markdown("**⚡ Momentum & Signals:**")
+                    
+                    # Momentum
+                    momentum_color = {
+                        'EXTREMELY_OVERBOUGHT': '🔴',
+                        'OVERBOUGHT': '🟠',
+                        'BULLISH': '🟢',
+                        'NEUTRAL': '🟡',
+                        'BEARISH': '🔴',
+                        'OVERSOLD': '🟢',
+                        'EXTREMELY_OVERSOLD': '🟢'
+                    }.get(analysis['momentum'], '⚪')
+                    
+                    st.write(f"{momentum_color} **Momentum:** {analysis['momentum'].replace('_', ' ').title()}")
+                    st.write(f"📊 **RSI:** {analysis['rsi']:.1f}")
+                    
+                    # Bollinger Band position
+                    bb_color = {
+                        'EXTREME_UPPER': '🔴',
+                        'UPPER_BAND': '🟠',
+                        'MIDDLE_RANGE': '🟢',
+                        'LOWER_BAND': '🟠',
+                        'EXTREME_LOWER': '🔴'
+                    }.get(analysis['bb_signal'], '⚪')
+                    
+                    st.write(f"{bb_color} **BB Position:** {analysis['bb_signal'].replace('_', ' ').title()}")
+                    st.write(f"📊 **BB %:** {analysis['bb_position']:.1f}%")
                 
-                with col3:
-                    momentum_color = "🔴" if "OVERBOUGHT" in analysis['momentum'] else "🟢" if "OVERSOLD" in analysis['momentum'] else "🟡"
-                    st.metric("Momentum", f"{momentum_color} {analysis['momentum']}")
-                    st.metric("BB Signal", analysis['bb_signal'])
-                
-                # Options Data Summary
-                st.subheader("🎯 Options Data Summary")
-                options = result['options_data']
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Expiration", options['expiration'])
-                with col2:
-                    st.metric("Available Calls", len(options['calls']))
-                with col3:
-                    st.metric("Available Puts", len(options['puts']))
-                with col4:
-                    st.metric("Days to Expiry", options['days_to_expiry'])
-                
-                # Strategy Recommendations with Detailed Explanations
-                st.subheader("💡 Strategy Recommendations with Detailed Explanations")
-                
-                st.success(f"**Best Strategy for {asset_class}:** {result['best_strategy']} (Confidence: {result['confidence']:.1f}/10)")
-                
-                # Show detailed explanations for each strategy score
-                st.markdown("### 📊 Detailed Strategy Scoring Explanations")
+                # Strategy Analysis
+                st.subheader(f"🎯 {asset_class} Strategy Analysis")
                 
                 strategy_scores = result['strategy_scores']
-                strategy_explanations = result.get('strategy_explanations', {})
+                strategy_explanations = result['strategy_explanations']
                 
-                for strategy, score in strategy_scores.items():
-                    with st.expander(f"📋 {strategy} - Score: {score:.1f}/10", expanded=(strategy == result['best_strategy'])):
-                        
-                        # Show explanation if available
-                        if strategy in strategy_explanations:
-                            st.markdown("**🔍 How this score was calculated:**")
-                            for explanation in strategy_explanations[strategy]:
-                                st.markdown(f"• {explanation}")
+                # Display top strategies with detailed explanations
+                col1, col2 = st.columns([1, 1])
                 
-                # Optimal Contract Recommendations
-                st.subheader("🎯 Optimal Contract Recommendations")
-                
-                col1, col2 = st.columns([2, 1])
                 with col1:
-                    available_capital = st.number_input(
-                        "Available Capital ($)",
-                        min_value=1000,
-                        max_value=1000000,
-                        value=10000,
-                        step=1000,
-                        help="Enter your available trading capital for position sizing",
-                        key=f"capital_{asset_class}_{result['ticker']}"  # Unique key to preserve state
-                    )
+                    st.markdown("**🏆 Recommended Strategies:**")
+                    for i, (strategy, score) in enumerate(list(strategy_scores.items())[:3]):
+                        if i == 0:
+                            st.success(f"🥇 **{strategy.replace('_', ' ').title()}** - {score:.1f}/10")
+                        elif i == 1:
+                            st.info(f"🥈 **{strategy.replace('_', ' ').title()}** - {score:.1f}/10")
+                        else:
+                            st.warning(f"🥉 **{strategy.replace('_', ' ').title()}** - {score:.1f}/10")
                 
                 with col2:
-                    calculate_contracts = st.button(
-                        "📊 Calculate Optimal Contracts",
-                        type="primary",
-                        key=f"calc_contracts_{asset_class}_{result['ticker']}"  # Unique key
-                    )
+                    st.markdown("**📊 All Strategy Scores:**")
+                    for strategy, score in strategy_scores.items():
+                        progress_val = score / 10.0
+                        st.write(f"**{strategy.replace('_', ' ').title()}:** {score:.1f}/10")
+                        st.progress(progress_val)
                 
-                if calculate_contracts:
-                    with st.spinner("Calculating optimal contract specifications..."):
+                # Detailed explanations for top strategy
+                if strategy_scores:
+                    best_strategy = list(strategy_scores.keys())[0]
+                    
+                    st.markdown("### 🔍 Why This Strategy?")
+                    
+                    if best_strategy in strategy_explanations:
+                        explanation_parts = strategy_explanations[best_strategy]
+                        
+                        st.markdown(f"**🎯 {best_strategy.replace('_', ' ').title()} Scoring Breakdown:**")
+                        
+                        for part in explanation_parts:
+                            # Format explanation parts with emojis
+                            if "Base score" in part:
+                                st.write(f"📊 {part}")
+                            elif "+0." in part or "+1." in part or "+2." in part:
+                                st.write(f"✅ {part}")
+                            elif "RSI" in part or "shows" in part:
+                                st.write(f"📈 {part}")
+                            else:
+                                st.write(f"💡 {part}")
+                
+                # Contract Recommendations
+                st.subheader(f"📋 {asset_class} Contract Recommendations")
+                
+                if strategy_scores:
+                    best_strategy = list(strategy_scores.keys())[0]
+                    
+                    # Get contract specifications
+                    with st.spinner("Calculating optimal contracts..."):
                         try:
-                            contract_calc = strategist.calculate_optimal_contracts(
-                                result['best_strategy'],
-                                result['market_analysis'],
-                                result['underlying_data'],
-                                result['options_data'],
-                                available_capital
+                            contract_specs = strategist.calculate_optimal_contracts(
+                                best_strategy, 
+                                analysis, 
+                                underlying, 
+                                result['options_data']
                             )
                             
-                            if 'error' not in contract_calc:
-                                st.success(f"✅ Optimal {result['best_strategy']} calculation completed!")
+                            if 'error' not in contract_specs:
                                 
-                                # Show optimal recommendation
-                                if 'optimal_recommendation' in contract_calc and contract_calc['optimal_recommendation']:
-                                    optimal = contract_calc['optimal_recommendation']
+                                if best_strategy in ['COVERED_CALL', 'CASH_SECURED_PUT', 'IRON_CONDOR', 
+                                                   'BULL_CALL_SPREAD', 'BEAR_PUT_SPREAD', 'PROTECTIVE_PUT']:
                                     
-                                    st.markdown("### 🏆 Recommended Trade Setup")
+                                    st.success(f"✅ {contract_specs['strategy']} Contract Analysis Complete")
                                     
-                                    # Display based on strategy type
-                                    if result['best_strategy'] == 'COVERED_CALL':
-                                        col1, col2, col3 = st.columns(3)
-                                        
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Strike Price", f"${optimal['strike']:.2f}")
-                                            st.metric("Premium/Contract", f"${optimal['premium']:.2f}")
-                                        
-                                        with col2:
-                                            st.metric("Total Investment", f"${optimal['net_investment']:,.2f}")
-                                            st.metric("Max Profit", f"${optimal['max_profit']:,.2f}")
-                                            st.metric("Max Profit %", f"{optimal['max_profit_pct']:.1f}%")
-                                        
-                                        with col3:
-                                            st.metric("Breakeven", f"${optimal['breakeven']:.2f}")
-                                            st.metric("Annualized Yield", f"{optimal['premium_yield_annualized']:.1f}%")
-                                            st.metric("Downside Protection", f"{optimal['downside_protection_pct']:.1f}%")
+                                    # Display market insight
+                                    if contract_specs.get('market_insight'):
+                                        st.info(f"💡 **Market Insight:** {contract_specs['market_insight']}")
                                     
-                                    elif result['best_strategy'] == 'CASH_SECURED_PUT':
-                                        col1, col2, col3 = st.columns(3)
+                                    # Display recommendations
+                                    if 'recommendations' in contract_specs:
+                                        recommendations = contract_specs['recommendations']
                                         
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Strike Price", f"${optimal['strike']:.2f}")
-                                            st.metric("Premium/Contract", f"${optimal['premium']:.2f}")
+                                        # Create tabs for different risk levels
+                                        risk_tabs = st.tabs([rec['risk_level'] for rec in recommendations])
                                         
-                                        with col2:
-                                            st.metric("Cash Required", f"${optimal['cash_required']:,.2f}")
-                                            st.metric("Premium Received", f"${optimal['premium_received']:,.2f}")
-                                            st.metric("Max Profit %", f"{optimal['max_profit_pct']:.1f}%")
-                                        
-                                        with col3:
-                                            st.metric("Effective Buy Price", f"${optimal['effective_buy_price']:.2f}")
-                                            st.metric("Discount %", f"{optimal['discount_pct']:.1f}%")
-                                            st.metric("Annualized Yield", f"{optimal['premium_yield_annualized']:.1f}%")
-                                    
-                                    elif result['best_strategy'] == 'IRON_CONDOR':
-                                        col1, col2, col3 = st.columns(3)
-                                        
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Net Credit", f"${optimal['total_credit']:,.2f}")
-                                            st.metric("Max Profit", f"${optimal['max_profit']:,.2f}")
-                                        
-                                        with col2:
-                                            st.metric("Max Loss", f"${optimal['max_loss']:,.2f}")
-                                            st.metric("Max Profit %", f"{optimal['max_profit_pct']:.1f}%")
-                                            st.metric("Margin Required", f"${optimal['margin_required']:,.2f}")
-                                        
-                                        with col3:
-                                            st.metric("Upper Breakeven", f"${optimal['upper_breakeven']:.2f}")
-                                            st.metric("Lower Breakeven", f"${optimal['lower_breakeven']:.2f}")
-                                            st.metric("Profit Range", f"{optimal['profit_range_pct']:.1f}%")
-                                    
-                                    elif result['best_strategy'] == 'BULL_CALL_SPREAD':
-                                        col1, col2, col3 = st.columns(3)
-                                        
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Buy Strike", f"${optimal['buy_strike']:.2f}")
-                                            st.metric("Sell Strike", f"${optimal['sell_strike']:.2f}")
-                                        
-                                        with col2:
-                                            st.metric("Net Debit", f"${optimal['net_debit_per_contract']:.2f}")
-                                            st.metric("Total Cost", f"${optimal['total_cost']:,.2f}")
-                                            st.metric("Max Profit", f"${optimal['max_profit']:,.2f}")
-                                        
-                                        with col3:
-                                            st.metric("Max Profit %", f"{optimal['max_profit_pct']:.1f}%")
-                                            st.metric("Breakeven", f"${optimal['breakeven']:.2f}")
-                                            st.metric("Target Price", f"${optimal['target_price']:.2f}")
-                                    
-                                    elif result['best_strategy'] == 'BEAR_PUT_SPREAD':
-                                        col1, col2, col3 = st.columns(3)
-                                        
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Buy Strike", f"${optimal['buy_strike']:.2f}")
-                                            st.metric("Sell Strike", f"${optimal['sell_strike']:.2f}")
-                                        
-                                        with col2:
-                                            st.metric("Net Debit", f"${optimal['net_debit_per_contract']:.2f}")
-                                            st.metric("Total Cost", f"${optimal['total_cost']:,.2f}")
-                                            st.metric("Max Profit", f"${optimal['max_profit']:,.2f}")
-                                        
-                                        with col3:
-                                            st.metric("Max Profit %", f"{optimal['max_profit_pct']:.1f}%")
-                                            st.metric("Breakeven", f"${optimal['breakeven']:.2f}")
-                                            st.metric("Target Price", f"${optimal['target_price']:.2f}")
-                                    
-                                    elif result['best_strategy'] == 'LONG_STRADDLE':
-                                        optimal = contract_calc['recommendation']  # Different structure for straddle
-                                        col1, col2, col3 = st.columns(3)
-                                        
-                                        with col1:
-                                            st.metric("Contracts", optimal['contracts'])
-                                            st.metric("Strike Price", f"${optimal['strike']:.2f}")
-                                            st.metric("Total Premium", f"${optimal['total_premium_per_contract']:.2f}")
-                                        
-                                        with col2:
-                                            st.metric("Total Cost", f"${optimal['total_cost']:,.2f}")
-                                            st.metric("Upper Breakeven", f"${optimal['upper_breakeven']:.2f}")
-                                            st.metric("Lower Breakeven", f"${optimal['lower_breakeven']:.2f}")
-                                        
-                                        with col3:
-                                            st.metric("Required Move %", f"{optimal['required_move_pct']:.1f}%")
-                                            st.metric("Expected Move %", f"{optimal['expected_move_pct']:.1f}%")
-                                            st.metric("Profit Probability", f"{optimal['profit_probability_estimate']:.0f}%")
-                                    
-                                    elif result['best_strategy'] == 'PROTECTIVE_PUT':
-                                        # Show all risk levels for protective puts
-                                        recommendations = contract_calc.get('recommendations', [])
-                                        if recommendations:
-                                            st.markdown("### 📊 Protection Level Options")
-                                            
-                                            for rec in recommendations:
-                                                with st.expander(f"🛡️ {rec['risk_level']} Protection ({rec['protection_level_pct']:.0f}% downside)", 
-                                                            expanded=(rec['risk_level'] == 'Moderate')):
-                                                    col1, col2, col3 = st.columns(3)
-                                                    
-                                                    with col1:
-                                                        st.metric("Contracts", rec['contracts'])
-                                                        st.metric("Put Strike", f"${rec['put_strike']:.2f}")
-                                                        st.metric("Put Premium", f"${rec['put_price']:.2f}")
-                                                    
-                                                    with col2:
-                                                        st.metric("Total Investment", f"${rec['total_investment']:,.2f}")
-                                                        st.metric("Insurance Cost %", f"{rec['insurance_cost_pct']:.2f}%")
-                                                        st.metric("Annualized Cost", f"{rec['annualized_insurance_cost']:.1f}%")
-                                                    
-                                                    with col3:
-                                                        st.metric("Effective Floor", f"${rec['effective_floor']:.2f}")
-                                                        st.metric("Max Loss", f"${rec['total_max_loss']:,.2f}")
-                                                        st.metric("Max Loss %", f"{rec['max_loss_pct']:.1f}%")
-                                
-                                # Show all recommendations for some strategies
-                                if result['best_strategy'] in ['COVERED_CALL', 'CASH_SECURED_PUT', 'IRON_CONDOR', 'BULL_CALL_SPREAD', 'BEAR_PUT_SPREAD']:
-                                    recommendations = contract_calc.get('recommendations', [])
-                                    if len(recommendations) > 1:
-                                        st.markdown("### 📊 All Risk Level Options")
-                                        
-                                        for rec in recommendations:
-                                            risk_emoji = "🟢" if rec['risk_level'] == 'Conservative' else "🟡" if rec['risk_level'] == 'Moderate' else "🔴"
-                                            
-                                            with st.expander(f"{risk_emoji} {rec['risk_level']} Approach", 
-                                                        expanded=(rec['risk_level'] == 'Moderate')):
+                                        for tab, rec in zip(risk_tabs, recommendations):
+                                            with tab:
+                                                col1, col2, col3 = st.columns(3)
                                                 
-                                                if result['best_strategy'] == 'COVERED_CALL':
-                                                    col1, col2, col3 = st.columns(3)
-                                                    with col1:
-                                                        st.write(f"**Strike:** ${rec['strike']:.2f}")
-                                                        st.write(f"**Premium:** ${rec['premium']:.2f}")
-                                                        st.write(f"**Contracts:** {rec['contracts']}")
-                                                    with col2:
-                                                        st.write(f"**Net Investment:** ${rec['net_investment']:,.2f}")
-                                                        st.write(f"**Max Profit:** ${rec['max_profit']:,.2f}")
-                                                        st.write(f"**Max Profit %:** {rec['max_profit_pct']:.1f}%")
-                                                    with col3:
-                                                        st.write(f"**Breakeven:** ${rec['breakeven']:.2f}")
-                                                        st.write(f"**Annual Yield:** {rec['premium_yield_annualized']:.1f}%")
-                                                        st.write(f"**Protection:** {rec['downside_protection_pct']:.1f}%")
+                                                with col1:
+                                                    st.markdown("**📊 Position Details:**")
+                                                    
+                                                    if asset_class == 'FOREX':
+                                                        st.metric("Strike", f"{rec['strike']:.5f}")
+                                                        st.metric("Premium", f"{rec['premium']:.4f}")
+                                                    else:
+                                                        st.metric("Strike", f"${rec['strike']:.2f}")
+                                                        st.metric("Premium", f"${rec['premium']:.2f}")
+                                                    
+                                                    st.metric("Contracts", rec['contracts'])
                                                 
-                                                elif result['best_strategy'] == 'IRON_CONDOR':
-                                                    col1, col2 = st.columns(2)
-                                                    with col1:
-                                                        st.write(f"**Contracts:** {rec['contracts']}")
-                                                        st.write(f"**Net Credit:** ${rec['total_credit']:,.2f}")
-                                                        st.write(f"**Max Profit:** ${rec['max_profit']:,.2f}")
-                                                        st.write(f"**Max Loss:** ${rec['max_loss']:,.2f}")
-                                                    with col2:
-                                                        st.write(f"**Upper BE:** ${rec['upper_breakeven']:.2f}")
-                                                        st.write(f"**Lower BE:** ${rec['lower_breakeven']:.2f}")
-                                                        st.write(f"**Profit Range:** {rec['profit_range_pct']:.1f}%")
-                                                        st.write(f"**Profit %:** {rec['max_profit_pct']:.1f}%")
+                                                with col2:
+                                                    st.markdown("**💰 Financial Impact:**")
+                                                    
+                                                    if best_strategy == 'COVERED_CALL':
+                                                        st.metric("Stock Cost", f"${rec['total_stock_cost']:,.0f}")
+                                                        st.metric("Premium Received", f"${rec['total_premium_received']:,.0f}")
+                                                        st.metric("Net Investment", f"${rec['net_investment']:,.0f}")
+                                                        st.metric("Max Profit", f"${rec['max_profit']:,.0f}")
+                                                    
+                                                    elif best_strategy == 'CASH_SECURED_PUT':
+                                                        st.metric("Cash Required", f"${rec['cash_required']:,.0f}")
+                                                        st.metric("Premium Received", f"${rec['premium_received']:,.0f}")
+                                                        st.metric("Effective Buy Price", f"${rec['effective_buy_price']:.2f}")
+                                                        st.metric("Max Profit", f"${rec['max_profit']:,.0f}")
+                                                    
+                                                    elif best_strategy == 'IRON_CONDOR':
+                                                        st.metric("Credit Received", f"${rec['total_credit']:,.0f}")
+                                                        st.metric("Max Profit", f"${rec['max_profit']:,.0f}")
+                                                        st.metric("Max Loss", f"${rec['max_loss']:,.0f}")
+                                                        st.metric("Margin Required", f"${rec['margin_required']:,.0f}")
+                                                    
+                                                    else:  # Spreads
+                                                        st.metric("Total Cost", f"${rec['total_cost']:,.0f}")
+                                                        st.metric("Max Profit", f"${rec['max_profit']:,.0f}")
+                                                        st.metric("Max Loss", f"${rec['max_loss']:,.0f}")
+                                                        if 'target_price' in rec:
+                                                            if asset_class == 'FOREX':
+                                                                st.metric("Target Price", f"{rec['target_price']:.5f}")
+                                                            else:
+                                                                st.metric("Target Price", f"${rec['target_price']:.2f}")
+                                                
+                                                with col3:
+                                                    st.markdown("**📈 Risk/Reward:**")
+                                                    
+                                                    if best_strategy == 'COVERED_CALL':
+                                                        st.metric("Max Profit %", f"{rec['max_profit_pct']:.1f}%")
+                                                        st.metric("Annualized Yield", f"{rec['premium_yield_annualized']:.1f}%")
+                                                        st.metric("Downside Protection", f"{rec['downside_protection_pct']:.1f}%")
+                                                        if asset_class == 'FOREX':
+                                                            st.metric("Breakeven", f"{rec['breakeven']:.5f}")
+                                                        else:
+                                                            st.metric("Breakeven", f"${rec['breakeven']:.2f}")
+                                                    
+                                                    elif best_strategy == 'CASH_SECURED_PUT':
+                                                        st.metric("Max Profit %", f"{rec['max_profit_pct']:.1f}%")
+                                                        st.metric("Annualized Yield", f"{rec['premium_yield_annualized']:.1f}%")
+                                                        st.metric("Discount %", f"{rec['discount_pct']:.1f}%")
+                                                        if asset_class == 'FOREX':
+                                                            st.metric("Breakeven", f"{rec['breakeven']:.5f}")
+                                                        else:
+                                                            st.metric("Breakeven", f"${rec['breakeven']:.2f}")
+                                                    
+                                                    elif best_strategy == 'IRON_CONDOR':
+                                                        st.metric("Max Profit %", f"{rec['max_profit_pct']:.1f}%")
+                                                        st.metric("Profit Range", f"{rec['profit_range_pct']:.1f}%")
+                                                        if asset_class == 'FOREX':
+                                                            st.metric("Upper BE", f"{rec['upper_breakeven']:.5f}")
+                                                            st.metric("Lower BE", f"{rec['lower_breakeven']:.5f}")
+                                                        else:
+                                                            st.metric("Upper BE", f"${rec['upper_breakeven']:.2f}")
+                                                            st.metric("Lower BE", f"${rec['lower_breakeven']:.2f}")
+                                                    
+                                                    else:  # Spreads
+                                                        st.metric("Max Profit %", f"{rec['max_profit_pct']:.1f}%")
+                                                        st.metric("Move Required", f"{rec['breakeven_move_required_pct']:.1f}%")
+                                                        if asset_class == 'FOREX':
+                                                            st.metric("Breakeven", f"{rec['breakeven']:.5f}")
+                                                        else:
+                                                            st.metric("Breakeven", f"${rec['breakeven']:.2f}")
+                                        
+                                        # Optimal recommendation callout
+                                        if contract_specs.get('optimal_recommendation'):
+                                            optimal = contract_specs['optimal_recommendation']
+                                            st.success(f"🎯 **Recommended:** {optimal['risk_level']} approach for balanced risk/reward")
+                                    
+                                    elif 'recommendation' in contract_specs:  # For straddle
+                                        rec = contract_specs['recommendation']
+                                        
+                                        col1, col2, col3 = st.columns(3)
+                                        
+                                        with col1:
+                                            st.markdown("**📊 Straddle Details:**")
+                                            if asset_class == 'FOREX':
+                                                st.metric("Strike", f"{rec['strike']:.5f}")
+                                                st.metric("Call Price", f"{rec['call_price']:.4f}")
+                                                st.metric("Put Price", f"{rec['put_price']:.4f}")
+                                            else:
+                                                st.metric("Strike", f"${rec['strike']:.2f}")
+                                                st.metric("Call Price", f"${rec['call_price']:.2f}")
+                                                st.metric("Put Price", f"${rec['put_price']:.2f}")
+                                            st.metric("Contracts", rec['contracts'])
+                                        
+                                        with col2:
+                                            st.markdown("**💰 Investment:**")
+                                            st.metric("Total Cost", f"${rec['total_cost']:,.0f}")
+                                            st.metric("Max Loss", f"${rec['max_loss']:,.0f}")
+                                            if asset_class == 'FOREX':
+                                                st.metric("Upper BE", f"{rec['upper_breakeven']:.5f}")
+                                                st.metric("Lower BE", f"{rec['lower_breakeven']:.5f}")
+                                            else:
+                                                st.metric("Upper BE", f"${rec['upper_breakeven']:.2f}")
+                                                st.metric("Lower BE", f"${rec['lower_breakeven']:.2f}")
+                                        
+                                        with col3:
+                                            st.markdown("**📈 Expectations:**")
+                                            st.metric("Required Move", f"{rec['required_move_pct']:.1f}%")
+                                            st.metric("Expected Move", f"{rec['expected_move_pct']:.1f}%")
+                                            st.metric("Profit Probability", f"{rec['profit_probability_estimate']:.0f}%")
+                                            if asset_class == 'FOREX':
+                                                st.metric("Breakeven Range", f"{rec['breakeven_range']:.5f}")
+                                            else:
+                                                st.metric("Breakeven Range", f"${rec['breakeven_range']:.2f}")
                                 
-                                # Show market insight
-                                if contract_calc.get('market_insight'):
-                                    st.info(f"💡 Market Insight: {contract_calc['market_insight']}")
+                                else:
+                                    st.info(f"📊 {best_strategy} contract analysis available - implement display logic")
                             
                             else:
-                                st.error(f"❌ Contract calculation failed: {contract_calc['error']}")
+                                st.error(f"❌ Contract calculation failed: {contract_specs['error']}")
+                                if 'min_capital_needed' in contract_specs:
+                                    st.info(f"💡 Minimum capital needed: ${contract_specs['min_capital_needed']:,.2f}")
                         
                         except Exception as e:
                             st.error(f"❌ Contract calculation failed: {str(e)}")
                 
-                # Export data
-                st.subheader("📤 Export Analysis")
+                # Options Data Summary
+                st.subheader(f"🎯 {asset_class} Options Data Summary")
                 
-                export_data = {
-                    'analysis_timestamp': datetime.now().isoformat(),
-                    'asset_class': asset_class,
-                    'ticker': result['ticker'],
-                    'market_analysis': result['market_analysis'],
-                    'strategy_scores': result['strategy_scores'],
-                    'best_strategy': result['best_strategy'],
-                    'confidence': result['confidence']
-                }
+                options_data = result['options_data']
                 
-                st.download_button(
-                    f"📋 Download {asset_class} Analysis",
-                    json.dumps(export_data, indent=2),
-                    f"{result['ticker']}_{asset_class}_analysis.json",
-                    "application/json",
-                    key=f"download_{asset_class}_{result['ticker']}"  # Unique key
-                )
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Expiration", options_data['expiration'])
+                    st.metric("Days to Expiry", options_data['days_to_expiry'])
+                
+                with col2:
+                    st.metric("Call Options", len(options_data['calls']))
+                    st.metric("Put Options", len(options_data['puts']))
+                
+                with col3:
+                    st.metric("Total Contracts", options_data['total_contracts'])
+                    st.metric("Data Source", options_data.get('source', 'real').title())
+                
+                with col4:
+                    pricing_breakdown = options_data.get('pricing_breakdown', {})
+                    real_prices = pricing_breakdown.get('total_real', 0)
+                    calc_prices = pricing_breakdown.get('total_calculated', 0)
+                    
+                    st.metric("Real Prices", real_prices)
+                    st.metric("Calculated Prices", calc_prices)
+                
+                # Pricing methodology explanation
+                if pricing_breakdown:
+                    real_pct = (real_prices / (real_prices + calc_prices) * 100) if (real_prices + calc_prices) > 0 else 0
+                    
+                    if real_pct > 50:
+                        st.success(f"✅ High data quality: {real_pct:.0f}% real market prices")
+                    elif real_pct > 20:
+                        st.warning(f"⚠️ Mixed data quality: {real_pct:.0f}% real prices, {100-real_pct:.0f}% calculated")
+                    else:
+                        st.info(f"📊 Calculated pricing: {calc_prices} options priced using Black-Scholes model")
+                
+                # Debug information
+                if debug_mode and 'debug_info' in result:
+                    st.subheader("🐛 Debug Information")
+                    debug_info = result['debug_info']
+                    
+                    with st.expander("Debug Details"):
+                        st.json(debug_info)
             
             else:
-                # Clear analysis result if asset class doesn't match
-                if st.session_state.analysis_result and st.session_state.analysis_result.get('asset_class') != asset_class:
-                    st.session_state.analysis_result = None
-                
-                # Instructions for current asset class when no analysis exists
-                asset_instructions = {
-                    'INDICES': """
-                    ## 📊 Index & ETF Options Analysis
-                    
-                    Analyze diversified market exposure with professional-grade tools for index options trading.
-                    
-                    ### 🎯 Popular Index Products:
-                    - SPY: S&P 500 ETF (most liquid options)
-                    - QQQ: NASDAQ 100 ETF (tech focus)
-                    - IWM: Russell 2000 ETF (small caps)
-                    
-                    ### 🚀 Getting Started:
-                    1. Select a popular symbol from the sidebar
-                    2. Click "Analyze Real Data" for comprehensive analysis
-                    3. Review strategy recommendations optimized for index products
-                    4. Get optimal contract specifications for maximum profitability
-                    """,
-                    
-                    'EQUITIES': """
-                    ## 📈 Individual Stock Options Analysis
-                    
-                    Target specific companies with higher alpha potential and company-specific catalysts.
-                    
-                    ### 🎯 Popular Equity Options:
-                    - AAPL: Apple (earnings-driven moves)
-                    - MSFT: Microsoft (enterprise focus)
-                    - GOOGL: Alphabet (search/AI exposure)
-                    
-                    ### 🚀 Getting Started:
-                    1. Search for your target company using the sidebar
-                    2. Analyze before earnings for volatility opportunities
-                    3. Get detailed explanations for confidence scores
-                    4. Calculate optimal contracts for your capital
-                    """,
-                    
-                    'FOREX': """
-                    ## 💱 Currency Options Analysis
-                    
-                    Trade global macro themes with 24/5 markets and central bank-driven moves.
-                    
-                    ### 🎯 Major Currency Pairs:
-                    - EURUSD: Euro/US Dollar (most liquid)
-                    - GBPUSD: British Pound/US Dollar
-                    - USDJPY: US Dollar/Japanese Yen
-                    
-                    ### 🚀 Getting Started:
-                    1. Start with major pairs for best liquidity
-                    2. Monitor central bank calendars for volatility
-                    3. Get optimized contract recommendations for FX-specific strategies
-                    """
-                }
-                
-                st.markdown(asset_instructions[asset_class])
+                st.warning(f"Analysis result is for {result.get('asset_class', 'unknown')} but current selection is {asset_class}")
+        
+        elif st.session_state.analysis_result and not st.session_state.analysis_result.get('success'):
+            # Show error from previous analysis attempt
+            result = st.session_state.analysis_result
+            st.error(f"❌ Previous analysis failed: {result.get('error', 'Unknown error')}")
         
         else:
-            # Instructions for current asset class when no analysis exists
-            asset_instructions = {
+            # Show instructions for current asset class
+            analysis_instructions = {
                 'INDICES': """
-                ## 📊 Index & ETF Options Analysis
+                ## 📊 Index Options Analysis
                 
-                Analyze diversified market exposure with professional-grade tools for index options trading.
+                Analyze index ETFs and volatility products with professional-grade options strategies.
                 
-                ### 🎯 Popular Index Products:
-                - SPY: S&P 500 ETF (most liquid options)
-                - QQQ: NASDAQ 100 ETF (tech focus)
-                - IWM: Russell 2000 ETF (small caps)
+                ### 🎯 Index Analysis Features:
+                - **Market-wide exposure** with diversification benefits
+                - **Lower volatility** compared to individual stocks
+                - **Sector rotation insights** and economic cycle considerations
+                - **Popular instruments**: SPY, QQQ, IWM, EWU, VGK, VIX
                 
-                ### 🚀 Getting Started:
-                1. Select a popular symbol from the sidebar
-                2. Click "Analyze Real Data" for comprehensive analysis
-                3. Review strategy recommendations optimized for index products
-                4. Get optimal contract specifications for maximum profitability
+                ### 💡 Index-Specific Considerations:
+                - Index options often have better liquidity
+                - Less susceptible to single-name risk
+                - Volatility products (VIX) behave differently
+                - Quarterly rebalancing can create opportunities
                 """,
                 
                 'EQUITIES': """
-                ## 📈 Individual Stock Options Analysis
+                ## 📈 Equity Options Analysis
                 
-                Target specific companies with higher alpha potential and company-specific catalysts.
+                Comprehensive analysis of individual stock options with company-specific insights.
                 
-                ### 🎯 Popular Equity Options:
-                - AAPL: Apple (earnings-driven moves)
-                - MSFT: Microsoft (enterprise focus)
-                - GOOGL: Alphabet (search/AI exposure)
+                ### 🎯 Equity Analysis Features:
+                - **Company-specific risk assessment** and earnings considerations
+                - **Higher volatility** with greater profit potential
+                - **Earnings-driven strategies** around announcement dates
+                - **Popular instruments**: AAPL, MSFT, GOOGL, TSLA, NVDA, META
                 
-                ### 🚀 Getting Started:
-                1. Search for your target company using the sidebar
-                2. Analyze before earnings for volatility opportunities
-                3. Get detailed explanations for confidence scores
-                4. Calculate optimal contracts for your capital
+                ### 💡 Equity-Specific Considerations:
+                - Higher gamma around earnings events
+                - Single-name risk requires careful position sizing
+                - Sector rotation can impact correlations
+                - Corporate actions may affect options
                 """,
                 
                 'FOREX': """
-                ## 💱 Currency Options Analysis
+                ## 💱 FX Options Analysis
                 
-                Trade global macro themes with 24/5 markets and central bank-driven moves.
+                Currency options analysis with global macro considerations and 24/5 market dynamics.
                 
-                ### 🎯 Major Currency Pairs:
-                - EURUSD: Euro/US Dollar (most liquid)
-                - GBPUSD: British Pound/US Dollar
-                - USDJPY: US Dollar/Japanese Yen
+                ### 🎯 FX Analysis Features:
+                - **Central bank policy impact** on currency movements
+                - **24/5 trading** with continuous price discovery
+                - **Global macro themes** and economic data sensitivity
+                - **Popular instruments**: EUR/USD, GBP/USD, USD/JPY, AUD/USD
                 
-                ### 🚀 Getting Started:
-                1. Start with major pairs for best liquidity
-                2. Monitor central bank calendars for volatility
-                3. Get optimized contract recommendations for FX-specific strategies
+                ### 💡 FX-Specific Considerations:
+                - Different volatility patterns vs equities
+                - Interest rate differentials affect pricing
+                - Central bank meetings create vol spikes
+                - No traditional "volume" - focus on price action
                 """
             }
             
-            st.markdown(asset_instructions[asset_class])
+            st.markdown(analysis_instructions[asset_class])
 
     # Tab 2: Strategy Guide
     with tab2:
-        st.header("📚 Multi-Asset Strategy Guide")
+        st.header(f"📚 {asset_class} Options Strategy Guide")
         
-        strategies = get_strategy_explanations()
+        # Get strategy explanations
+        strategy_explanations = get_strategy_explanations()
         
         # Filter strategies by asset class
-        for strategy_key, strategy_info in strategies.items():
-            if asset_class in strategy_info.get('asset_classes', []):
-                with st.expander(f"📋 {strategy_info['name']} (Optimized for {asset_class})", expanded=False):
-                    
-                    st.markdown(f"**{strategy_info['description']}**")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("### 📊 Strategy Overview")
-                        st.markdown(f"**Market Outlook:** {strategy_info['market_outlook']}")
-                        st.markdown(f"**Max Profit:** {strategy_info['max_profit']}")
-                        st.markdown(f"**Max Loss:** {strategy_info['max_loss']}")
-                        st.markdown(f"**Breakeven:** {strategy_info['breakeven']}")
-                    
-                    with col2:
-                        st.markdown("### 💡 When to Use")
-                        for condition in strategy_info['when_to_use']:
-                            st.markdown(f"• {condition}")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("### ✅ Pros")
-                        for pro in strategy_info['pros']:
-                            st.markdown(f"• {pro}")
-                    
-                    with col2:
-                        st.markdown("### ❌ Cons")
-                        for con in strategy_info['cons']:
-                            st.markdown(f"• {con}")
-                    
-                    st.markdown("### 📝 Examples by Asset Class")
-                    examples = strategy_info.get('examples', {})
-                    
-                    if asset_class in examples:
-                        st.success(f"**{asset_class} Example:** {examples[asset_class]}")
+        applicable_strategies = {}
+        for strategy_name, details in strategy_explanations.items():
+            if asset_class in details.get('asset_classes', []):
+                applicable_strategies[strategy_name] = details
+        
+        if not applicable_strategies:
+            st.warning(f"No specific strategies configured for {asset_class}")
+            applicable_strategies = strategy_explanations
+        
+        st.info(f"**{len(applicable_strategies)} strategies** available for {asset_class} options trading")
+        
+        # Strategy selector
+        selected_strategy = st.selectbox(
+            "📋 Select Strategy to Learn About:",
+            list(applicable_strategies.keys()),
+            format_func=lambda x: applicable_strategies[x]['name']
+        )
+        
+        if selected_strategy:
+            strategy = applicable_strategies[selected_strategy]
+            
+            # Strategy overview
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.subheader(f"🎯 {strategy['name']}")
+                st.write(strategy['description'])
+                
+                st.markdown("**📊 Market Outlook:**")
+                st.info(strategy['market_outlook'])
+                
+                # Asset-specific example
+                if asset_class in strategy.get('examples', {}):
+                    st.markdown("**💡 Example for " + asset_class + ":**")
+                    st.code(strategy['examples'][asset_class])
+            
+            with col2:
+                st.markdown("**📈 Profit/Loss Profile:**")
+                st.write(f"**Max Profit:** {strategy['max_profit']}")
+                st.write(f"**Max Loss:** {strategy['max_loss']}")
+                st.write(f"**Breakeven:** {strategy['breakeven']}")
+        
+        # Detailed breakdown
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### ✅ When to Use")
+            for point in strategy['when_to_use']:
+                st.write(f"• {point}")
+            
+            st.markdown("### 👍 Advantages")
+            for pro in strategy['pros']:
+                st.write(f"✅ {pro}")
+        
+        with col2:
+            st.markdown("### ⚠️ Considerations")
+            for con in strategy['cons']:
+                st.write(f"⚠️ {con}")
+        
+        # Asset class specific notes
+        if asset_class == 'FOREX':
+            st.markdown("### 💱 FX-Specific Notes")
+            st.info("""
+            **Currency options considerations:**
+            • Settlement typically in cash, not physical delivery
+            • Interest rate differentials affect pricing (rho more important)
+            • Central bank meetings create volatility spikes
+            • Different delta conventions (25Δ, 10Δ common)
+            • 24/5 trading affects time decay calculations
+            """)
+        
+        elif asset_class == 'INDICES':
+            st.markdown("### 📊 Index-Specific Notes")
+            st.info("""
+            **Index options considerations:**
+            • Lower volatility due to diversification
+            • Less single-name risk
+            • Quarterly rebalancing effects
+            • European-style exercise for some indices
+            • Better liquidity in popular ETF options
+            """)
+        
+        elif asset_class == 'EQUITIES':
+            st.markdown("### 📈 Equity-Specific Notes")
+            st.info("""
+            **Individual stock considerations:**
+            • Earnings announcements create vol spikes
+            • Company-specific news risk
+            • Higher gamma potential
+            • Dividend impacts on American-style options
+            • Sector rotation affects correlations
+            """)
+        
+        # Risk management section
+        st.markdown("### ⚡ Risk Management")
+        
+        risk_guidelines = {
+            'FOREX': [
+                "Monitor central bank communications and policy changes",
+                "Consider interest rate differential impacts",
+                "Watch for intervention threats from authorities",
+                "Use appropriate position sizing for leverage",
+                "Monitor global risk sentiment shifts"
+            ],
+            'INDICES': [
+                "Diversification reduces single-name risk",
+                "Monitor sector rotation and economic cycle",
+                "Consider correlation with broader market",
+                "Watch for rebalancing effects",
+                "Use for portfolio hedging strategies"
+            ],
+            'EQUITIES': [
+                "Limit single-name concentration",
+                "Monitor earnings calendar and announcements",
+                "Consider sector and style factors",
+                "Watch for corporate actions",
+                "Use stop-losses for directional strategies"
+            ]
+        }
+        
+        for guideline in risk_guidelines[asset_class]:
+            st.write(f"🛡️ {guideline}")
 
     # Tab 3: Options Greeks
     with tab3:
@@ -4161,7 +4621,7 @@ def main():
         
         with col1:
             default_symbol = {
-                'INDICES': 'EWU',
+                'INDICES': 'SPY',
                 'EQUITIES': 'AAPL', 
                 'FOREX': 'EURUSD'
             }[asset_class]
@@ -4766,118 +5226,166 @@ def main():
 
     # Tab 4: Backtester
     with tab4:
-        st.header(f"📈 {asset_class} Strategy Backtester")
+        st.header(f"📈 {asset_class} Options Strategy Backtester")
         
-        col1, col2 = st.columns([2, 1])
+        # Backtester configuration
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            default_symbol = {
-                'INDICES': 'EWU',
+            default_symbols = {
+                'INDICES': 'SPY',
                 'EQUITIES': 'AAPL', 
                 'FOREX': 'EURUSD'
-            }[asset_class]
+            }
             
             backtest_symbol = st.text_input(
-                f"Symbol for Backtesting ({asset_class})",
-                value=default_symbol,
+                f"Symbol for Backtest ({asset_class})",
+                value=default_symbols[asset_class],
                 help=f"Enter {asset_class.lower()} ticker symbol"
             )
-            
-            available_strategies = [
-                'COVERED_CALL',
+        
+        with col2:
+            strategies = [
+                'COVERED_CALL', 
                 'CASH_SECURED_PUT', 
-                'IRON_CONDOR',
-                'BULL_CALL_SPREAD',
+                'IRON_CONDOR', 
+                'BULL_CALL_SPREAD', 
                 'BEAR_PUT_SPREAD',
                 'BUY_AND_HOLD'
             ]
             
-            selected_strategy = st.selectbox(
-                f"Strategy to Backtest ({asset_class})",
-                available_strategies
-            )
+            # Filter strategies by asset class
+            if asset_class == 'FOREX':
+                # FX specific strategies
+                available_strategies = ['IRON_CONDOR', 'BULL_CALL_SPREAD', 'BEAR_PUT_SPREAD', 'BUY_AND_HOLD']
+            else:
+                available_strategies = strategies
             
-            col1a, col1b = st.columns(2)
-            with col1a:
-                start_date = st.date_input(
-                    "Start Date",
-                    value=datetime.now() - timedelta(days=365),
-                    max_value=datetime.now() - timedelta(days=30)
-                )
-            with col1b:
-                end_date = st.date_input(
-                    "End Date", 
-                    value=datetime.now() - timedelta(days=1),
-                    max_value=datetime.now()
-                )
+            selected_strategy = st.selectbox(
+                "Strategy to Backtest",
+                available_strategies,
+                help=f"Choose strategy for {asset_class} backtesting"
+            )
+        
+        with col3:
+            backtest_period = st.selectbox(
+                "Backtest Period",
+                ['6M', '1Y', '2Y', '3Y'],
+                index=1,
+                help="Historical period for backtesting"
+            )
+        
+        # Strategy parameters
+        st.subheader("🔧 Strategy Parameters")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            days_to_expiry = st.slider(
+                "Days to Expiry",
+                min_value=7,
+                max_value=90,
+                value=30,
+                help="Target days to expiration for options"
+            )
         
         with col2:
-            st.markdown(f"### {asset_class} Parameters")
-            
-            params = {}
-            
-            if asset_class == 'FOREX':
-                st.info("💱 FX-optimized parameters")
-                params['days_to_expiry'] = st.slider("Days to Expiry", 15, 60, 21)
-                params['delta_target'] = st.slider("Delta Target", 0.15, 0.35, 0.25, 0.05)
-            else:
-                params['days_to_expiry'] = st.slider("Days to Expiry", 15, 60, 30)
-                params['delta_target'] = st.slider("Delta Target", 0.1, 0.5, 0.3, 0.05)
-            
-            if selected_strategy == 'IRON_CONDOR':
-                if asset_class == 'FOREX':
-                    params['wing_width'] = st.slider("Wing Width", 0.01, 0.05, 0.02, 0.005)
-                else:
-                    params['wing_width'] = st.slider("Wing Width", 0.02, 0.10, 0.05, 0.01)
-            
-            run_backtest_button = st.button(
-                f"🚀 Run {asset_class} Backtest",
-                type="primary",
-                disabled=not backtest_symbol or start_date >= end_date
+            delta_target = st.slider(
+                "Delta Target",
+                min_value=0.1,
+                max_value=0.5,
+                value=0.3,
+                step=0.05,
+                help="Target delta for option selection"
             )
         
+        with col3:
+            if asset_class == 'FOREX':
+                wing_width = st.slider(
+                    "Wing Width (%)",
+                    min_value=1.0,
+                    max_value=5.0,
+                    value=2.0,
+                    step=0.5,
+                    help="Wing width for FX spreads (%)"
+                ) / 100
+            else:
+                wing_width = st.slider(
+                    "Wing Width (%)",
+                    min_value=2.0,
+                    max_value=10.0,
+                    value=5.0,
+                    step=0.5,
+                    help="Wing width for spreads (%)"
+                ) / 100
+        
+        run_backtest_button = st.button(
+            f"🔄 Run {asset_class} Backtest",
+            type="primary",
+            disabled=not backtest_symbol
+        )
+        
         if run_backtest_button and backtest_symbol:
-            with st.spinner(f"Running {asset_class} {selected_strategy} backtest..."):
-                try:
-                    backtest_result = strategist.run_strategy_backtest(
-                        backtest_symbol.upper(),
-                        asset_class, 
-                        selected_strategy,
-                        datetime.combine(start_date, datetime.min.time()),
-                        datetime.combine(end_date, datetime.min.time()),
-                        params
-                    )
+            
+            # Calculate backtest dates
+            period_days = {'6M': 180, '1Y': 365, '2Y': 730, '3Y': 1095}[backtest_period]
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=period_days)
+            
+            with st.spinner(f"Running {asset_class} {selected_strategy} backtest for {backtest_symbol} ({backtest_period})..."):
+                
+                # Create strategy parameters
+                strategy_params = {
+                    'days_to_expiry': days_to_expiry,
+                    'delta_target': delta_target,
+                    'wing_width': wing_width
+                }
+                
+                backtest_result = strategist.run_strategy_backtest(
+                    backtest_symbol.upper(),
+                    asset_class,
+                    selected_strategy,
+                    start_date,
+                    end_date,
+                    strategy_params
+                )
+                
+                if backtest_result['success']:
+                    st.session_state.backtest_result = backtest_result
                     
-                    if backtest_result['success']:
-                        st.session_state.backtest_result = backtest_result
-                        
-                        st.success(f"✅ {asset_class} backtest complete for {backtest_result['ticker']} - {selected_strategy}")
-                        
-                        # Performance Metrics
-                        st.subheader(f"📊 {asset_class} Performance Metrics")
-                        metrics = backtest_result['performance_metrics']
-                        
-                        col1, col2, col3, col4 = st.columns(4)
-                        
-                        with col1:
-                            st.metric("Total Return", f"{metrics['total_return']:.2f}%")
-                            st.metric("Annualized Return", f"{metrics['annualized_return']:.2f}%")
-                        
-                        with col2:
-                            st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
-                            st.metric("Volatility", f"{metrics['volatility']:.2f}%")
-                        
-                        with col3:
-                            st.metric("Max Drawdown", f"{metrics['max_drawdown']:.2f}%")
-                            st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
-                        
-                        with col4:
-                            st.metric("Total Trades", metrics['total_trades'])
-                            st.metric("Final Value", f"${metrics['final_portfolio_value']:,.2f}")
-                        
-                        # Performance Chart
-                        st.subheader(f"📈 {asset_class} Portfolio Performance")
-                        
+                    st.success(f"✅ {asset_class} backtest complete: {selected_strategy} on {backtest_symbol}")
+                    
+                    # Performance Summary
+                    st.subheader(f"📊 {asset_class} Backtest Results")
+                    
+                    metrics = backtest_result['performance_metrics']
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric("Total Return", f"{metrics['total_return']:.1f}%")
+                        st.metric("Win Rate", f"{metrics['win_rate']:.1f}%")
+                    
+                    with col2:
+                        st.metric("Annualized Return", f"{metrics['annualized_return']:.1f}%")
+                        st.metric("Total Trades", metrics['total_trades'])
+                    
+                    with col3:
+                        st.metric("Sharpe Ratio", f"{metrics['sharpe_ratio']:.2f}")
+                        st.metric("Avg P&L per Trade", f"${metrics['avg_pnl_per_trade']:.0f}")
+                    
+                    with col4:
+                        st.metric("Max Drawdown", f"{metrics['max_drawdown']:.1f}%")
+                        st.metric("Final Value", f"${metrics['final_portfolio_value']:,.0f}")
+                    
+                    # Performance Chart with Enhanced Technical Analysis
+                    st.subheader(f"📈 {asset_class} Portfolio Performance & Technical Analysis")
+                    
+                    # Create two charts: Performance and Technical
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("#### 💰 **Portfolio Performance**")
                         portfolio_values = backtest_result['results']['portfolio_values']
                         if portfolio_values:
                             portfolio_df = pd.DataFrame({
@@ -4909,91 +5417,207 @@ def main():
                                 xaxis_title='Date',
                                 yaxis_title='Portfolio Value ($)',
                                 template='plotly_dark',
-                                height=400
+                                height=300
                             )
                             
                             st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Trade Details
-                        st.subheader(f"📋 {asset_class} Trade Details")
-                        trades = backtest_result['results']['trades']
-                        
-                        if trades:
-                            trades_df = pd.DataFrame(trades)
-                            
-                            # Asset-specific formatting
-                            if asset_class == 'FOREX':
-                                if 'entry_price' in trades_df.columns:
-                                    trades_df['entry_price'] = trades_df['entry_price'].apply(lambda x: f"{x:.5f}")
-                                if 'exit_price' in trades_df.columns:
-                                    trades_df['exit_price'] = trades_df['exit_price'].apply(lambda x: f"{x:.5f}")
-                            else:
-                                if 'entry_price' in trades_df.columns:
-                                    trades_df['entry_price'] = trades_df['entry_price'].apply(lambda x: f"${x:.2f}")
-                                if 'exit_price' in trades_df.columns:
-                                    trades_df['exit_price'] = trades_df['exit_price'].apply(lambda x: f"${x:.2f}")
-                            
-                            # Format P&L
-                            if 'pnl' in trades_df.columns:
-                                trades_df['pnl'] = trades_df['pnl'].apply(lambda x: f"${x:,.2f}")
-                            
-                            st.dataframe(trades_df, use_container_width=True)
                     
-                    else:
-                        st.error(f"❌ {asset_class} backtest failed: {backtest_result['error']}")
+                    with col2:
+                        st.markdown("#### 📊 **Technical Analysis**")
+                        try:
+                            # Get underlying data for technical chart
+                            underlying_data = strategist.get_asset_data(backtest_symbol.upper(), asset_class, days=500)
+                            
+                            # Create technical chart with all SMAs
+                            chart_data = {
+                                'ticker': backtest_symbol.upper(),
+                                'current_price': underlying_data['current_price'],
+                                'historical_data': underlying_data['historical_data']
+                            }
+                            
+                            # Add 52-week high/low as support/resistance
+                            support_resistance = {
+                                'support_level': underlying_data['low_52w'],
+                                'resistance_level': underlying_data['high_52w']
+                            }
+                            
+                            technical_chart = strategist.create_trading_chart(chart_data, asset_class, support_resistance)
+                            technical_chart.update_layout(height=300, title=f'{asset_class} Technical Analysis')
+                            st.plotly_chart(technical_chart, use_container_width=True)
+                            
+                        except Exception as e:
+                            st.error(f"Could not create technical chart: {str(e)}")
+                    
+                    # Trade Analysis
+                    st.subheader(f"📋 {asset_class} Trade Analysis")
+                    
+                    trades = backtest_result['results']['trades']
+                    if trades:
+                        # Convert to DataFrame for analysis
+                        trades_df = pd.DataFrame(trades)
+                        
+                        # Profit/Loss distribution
+                        profitable_trades = trades_df[trades_df['pnl'] > 0]
+                        losing_trades = trades_df[trades_df['pnl'] <= 0]
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**💰 Profit Distribution:**")
+                            if not profitable_trades.empty:
+                                avg_win = profitable_trades['pnl'].mean()
+                                max_win = profitable_trades['pnl'].max()
+                                st.metric("Average Win", f"${avg_win:.0f}")
+                                st.metric("Best Trade", f"${max_win:.0f}")
+                            else:
+                                st.metric("Average Win", "$0")
+                                st.metric("Best Trade", "$0")
+                        
+                        with col2:
+                            st.markdown("**📉 Loss Distribution:**")
+                            if not losing_trades.empty:
+                                avg_loss = losing_trades['pnl'].mean()
+                                max_loss = losing_trades['pnl'].min()
+                                st.metric("Average Loss", f"${avg_loss:.0f}")
+                                st.metric("Worst Trade", f"${max_loss:.0f}")
+                            else:
+                                st.metric("Average Loss", "$0")
+                                st.metric("Worst Trade", "$0")
+                        
+                        # Show sample trades
+                        st.markdown("**📊 Sample Trades:**")
+                        display_trades = trades_df.head(10).copy()
+                        
+                        # Format dates and prices for display
+                        display_trades['entry_date'] = pd.to_datetime(display_trades['entry_date']).dt.strftime('%Y-%m-%d')
+                        display_trades['exit_date'] = pd.to_datetime(display_trades['exit_date']).dt.strftime('%Y-%m-%d')
+                        
+                        if asset_class == 'FOREX':
+                            display_trades['entry_price'] = display_trades['entry_price'].apply(lambda x: f"{x:.5f}")
+                            display_trades['exit_price'] = display_trades['exit_price'].apply(lambda x: f"{x:.5f}")
+                        else:
+                            display_trades['entry_price'] = display_trades['entry_price'].apply(lambda x: f"${x:.2f}")
+                            display_trades['exit_price'] = display_trades['exit_price'].apply(lambda x: f"${x:.2f}")
+                        
+                        display_trades['pnl'] = display_trades['pnl'].apply(lambda x: f"${x:.0f}")
+                        
+                        # Select relevant columns
+                        relevant_cols = ['entry_date', 'exit_date', 'entry_price', 'exit_price', 'pnl']
+                        if selected_strategy in ['COVERED_CALL', 'CASH_SECURED_PUT']:
+                            if 'call_premium' in display_trades.columns:
+                                relevant_cols.append('call_premium')
+                            if 'put_premium' in display_trades.columns:
+                                relevant_cols.append('put_premium')
+                        
+                        display_trades = display_trades[relevant_cols]
+                        st.dataframe(display_trades, use_container_width=True)
+                    
+                    # Strategy-specific insights
+                    strategy_insights = {
+                        'COVERED_CALL': f"""
+                        **📊 {asset_class} Covered Call Insights:**
+                        • This strategy performs best in sideways to slightly bullish markets
+                        • Premium collection provides downside cushion but caps upside
+                        • Consider adjusting strike selection based on volatility regime
+                        """,
+                        
+                        'CASH_SECURED_PUT': f"""
+                        **📊 {asset_class} Cash Secured Put Insights:**
+                        • Strategy acquires assets at effective discount when assigned
+                        • Works well in bullish trends with occasional pullbacks
+                        • Premium collection reduces effective cost basis
+                        """,
+                        
+                        'IRON_CONDOR': f"""
+                        **📊 {asset_class} Iron Condor Insights:**
+                        • Optimal in low volatility, range-bound environments
+                        • {'FX pairs often trade in ranges, making this strategy suitable' if asset_class == 'FOREX' else 'Benefits from time decay in stable markets'}
+                        • Adjust wing widths based on expected volatility
+                        """,
+                        
+                        'BULL_CALL_SPREAD': f"""
+                        **📊 {asset_class} Bull Call Spread Insights:**
+                        • Limited risk, limited reward strategy for moderate bull markets
+                        • Cost reduction vs buying calls outright
+                        • Performance depends on reaching upper strike by expiration
+                        """,
+                        
+                        'BEAR_PUT_SPREAD': f"""
+                        **📊 {asset_class} Bear Put Spread Insights:**
+                        • Profits from moderate downward movement
+                        • Cheaper than buying puts outright
+                        • Best in declining but not crashing markets
+                        """,
+                        
+                        'BUY_AND_HOLD': f"""
+                        **📊 {asset_class} Buy & Hold Insights:**
+                        • Baseline strategy for comparison with options strategies
+                        • {'Currency exposure with potential central bank impacts' if asset_class == 'FOREX' else 'Long-term asset appreciation with dividend/distribution potential'}
+                        • No options complexity or time decay concerns
+                        """
+                    }
+                    
+                    if selected_strategy in strategy_insights:
+                        st.info(strategy_insights[selected_strategy])
                 
-                except Exception as e:
-                    st.error(f"❌ {asset_class} backtest failed: {str(e)}")
+                else:
+                    st.error(f"❌ Backtest failed: {backtest_result.get('error', 'Unknown error')}")
         
         else:
-            # Backtest instructions for current asset class
+            # Show backtest instructions for current asset class
             backtest_instructions = {
                 'INDICES': """
-                ## 📊 Index Options Backtesting
+                ## 📈 Index Options Backtesting
                 
-                Test strategies on diversified market exposure with lower volatility profiles.
+                Test your strategies on index ETFs with historical performance analysis.
                 
-                ### 🎯 Recommended for Indices:
-                - **Covered Calls**: Generate income on broad market exposure
-                - **Iron Condors**: Capitalize on lower volatility regimes
-                - **Cash Secured Puts**: Acquire index exposure at discounts
+                ### 🎯 Index Backtesting Features:
+                - **Multiple strategies** optimized for index behavior
+                - **Risk-adjusted returns** with Sharpe ratio analysis
+                - **Drawdown analysis** for risk management
+                - **Trade-by-trade breakdown** for strategy refinement
                 
                 ### 💡 Index-Specific Considerations:
-                - Lower volatility than individual stocks
-                - Broader diversification reduces single-name risk
-                - Good for consistent income strategies
+                - Lower volatility provides steadier returns
+                - Diversification reduces single-name risk
+                - Quarterly rebalancing effects on long-term strategies
+                - Better suited for systematic options strategies
                 """,
                 
                 'EQUITIES': """
                 ## 📈 Equity Options Backtesting
                 
-                Test strategies on individual stocks with higher alpha potential.
+                Comprehensive backtesting for individual stock options strategies.
                 
-                ### 🎯 Recommended for Equities:
-                - **Bull/Bear Spreads**: Directional plays around earnings
-                - **Straddles**: Volatility expansion before events
-                - **Covered Calls**: Income on individual positions
+                ### 🎯 Equity Backtesting Features:
+                - **Company-specific analysis** with earnings considerations
+                - **Volatility regime testing** across different market periods
+                - **Single-name risk assessment** and position sizing guidance
+                - **Performance comparison** vs buy-and-hold
                 
                 ### 💡 Equity-Specific Considerations:
-                - Higher volatility creates more opportunities
-                - Company-specific catalysts affect performance
-                - Earnings season timing impacts results
+                - Higher volatility creates more opportunities and risks
+                - Earnings events significantly impact strategy performance
+                - Company-specific news can override technical signals
+                - Sector rotation affects strategy effectiveness
                 """,
                 
                 'FOREX': """
-                ## 💱 FX Options Backtesting
+                ## 📈 FX Options Backtesting
                 
-                Test strategies on 24/5 currency markets with central bank drivers.
+                Currency options strategy testing with 24/5 market dynamics.
                 
-                ### 🎯 Recommended for FX:
-                - **Iron Condors**: Range-bound currency pairs
-                - **Straddles**: Around central bank meetings
-                - **Directional Spreads**: Macro trend following
+                ### 🎯 FX Backtesting Features:
+                - **Central bank event analysis** and policy impact assessment
+                - **Interest rate differential effects** on strategy performance
+                - **Global macro theme testing** across different economic cycles
+                - **Volatility regime analysis** for FX-specific patterns
                 
                 ### 💡 FX-Specific Considerations:
-                - Different volatility patterns than equities
-                - Central bank policy drives major moves
-                - 24/5 trading affects time decay
+                - Different volatility patterns vs equity markets
+                - Central bank interventions can disrupt strategies
+                - Interest rate changes affect option pricing significantly
+                - 24/5 trading creates different risk management needs
                 """
             }
             
@@ -5003,289 +5627,360 @@ def main():
     with tab5:
         st.header(f"🔮 {asset_class} Market Predictions")
         
-        col1, col2 = st.columns([2, 1])
+        # Prediction configuration
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            default_symbol = {
-                'INDICES': 'EWU',
+            default_symbols = {
+                'INDICES': 'SPY',
                 'EQUITIES': 'AAPL', 
                 'FOREX': 'EURUSD'
-            }[asset_class]
+            }
             
             prediction_symbol = st.text_input(
                 f"Symbol for Prediction ({asset_class})",
-                value=default_symbol,
-                help=f"Enter {asset_class.lower()} ticker symbol for AI-powered analysis"
-            )
-            
-            prediction_days = st.slider(
-                "Prediction Time Horizon (Days)",
-                5, 60, 21,
-                help="Number of days ahead to predict"
+                value=default_symbols[asset_class],
+                help=f"Enter {asset_class.lower()} ticker symbol"
             )
         
         with col2:
-            generate_prediction = st.button(
+            prediction_days = st.selectbox(
+                "Prediction Timeframe",
+                [7, 14, 30, 60, 90],
+                index=2,
+                format_func=lambda x: f"{x} days",
+                help="Number of days ahead to predict"
+            )
+        
+        with col3:
+            generate_prediction_button = st.button(
                 f"🔮 Generate {asset_class} Prediction",
                 type="primary",
                 disabled=not prediction_symbol
             )
         
-        if generate_prediction and prediction_symbol:
-            with st.spinner(f"Generating {asset_class} prediction for {prediction_symbol}..."):
-                try:
-                    prediction_result = strategist.generate_market_prediction(
-                        prediction_symbol.upper(),
-                        asset_class,
-                        prediction_days
-                    )
+        if generate_prediction_button and prediction_symbol:
+            with st.spinner(f"Generating {asset_class} market prediction for {prediction_symbol} ({prediction_days} days)..."):
+                
+                prediction_result = strategist.generate_market_prediction(
+                    prediction_symbol.upper(),
+                    asset_class,
+                    prediction_days
+                )
+                
+                if prediction_result['success']:
+                    st.session_state.prediction_result = prediction_result
                     
-                    if prediction_result['success']:
-                        st.session_state.prediction_result = prediction_result
+                    st.success(f"✅ {asset_class} prediction complete for {prediction_result['ticker']}")
+                    
+                    # Current price and basic info
+                    current_price = prediction_result['current_price']
+                    predictions = prediction_result['price_predictions']
+                    confidence = prediction_result['confidence_score']
+                    
+                    # Price Predictions Chart
+                    st.subheader(f"📊 {asset_class} Price Predictions Chart")
+                    
+                    try:
+                        # Create chart with predictions using data from prediction result
+                        chart_data = {
+                            'ticker': prediction_result['ticker'],
+                            'current_price': current_price,
+                            'historical_data': prediction_result['historical_data']
+                        }
                         
-                        st.success(f"✅ {asset_class} prediction complete for {prediction_result['ticker']}")
+                        # Include all prediction levels on chart
+                        prediction_levels = {
+                            'support_level': predictions['support_level'],
+                            'resistance_level': predictions['resistance_level'],
+                            'target_price': predictions['target_price'],
+                            'bull_case': predictions['bull_case'],
+                            'bear_case': predictions['bear_case']
+                        }
                         
-                        # Current Market State
-                        st.subheader(f"📊 Current {asset_class} Market State")
+                        prediction_chart = strategist.create_trading_chart(chart_data, asset_class, prediction_levels)
+                        st.plotly_chart(prediction_chart, use_container_width=True)
                         
-                        col1, col2, col3, col4 = st.columns(4)
+                        # Chart legend
+                        st.info("""
+                        **📊 Chart Legend:**
+                        • **🟢 Support**: Key support level based on recent lows
+                        • **🔴 Resistance**: Key resistance level based on recent highs  
+                        • **🟡 Target**: Base case prediction target
+                        • **🔵 Bull Case**: Optimistic scenario target
+                        • **🟣 Bear Case**: Pessimistic scenario target
+                        • **SMAs**: 20, 40, 50, 100, 150, 200 period moving averages (where data allows)
+                        """)
                         
-                        current_price = prediction_result['current_price']
+                    except Exception as e:
+                        st.error(f"Could not create prediction chart: {str(e)}")
+                    
+                    # Price Predictions
+                    st.subheader(f"🎯 {asset_class} Price Predictions ({prediction_days} days)")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        if asset_class == 'FOREX':
+                            st.metric("Current Price", f"{current_price:.5f}")
+                            st.metric("Target Price", f"{predictions['target_price']:.5f}", 
+                                     f"{predictions['expected_move_pct']:+.1f}%")
+                        else:
+                            st.metric("Current Price", f"${current_price:.2f}")
+                            st.metric("Target Price", f"${predictions['target_price']:.2f}", 
+                                     f"{predictions['expected_move_pct']:+.1f}%")
+                    
+                    with col2:
+                        if asset_class == 'FOREX':
+                            st.metric("Bull Case", f"{predictions['bull_case']:.5f}")
+                            st.metric("Bear Case", f"{predictions['bear_case']:.5f}")
+                        else:
+                            st.metric("Bull Case", f"${predictions['bull_case']:.2f}")
+                            st.metric("Bear Case", f"${predictions['bear_case']:.2f}")
+                    
+                    with col3:
+                        if asset_class == 'FOREX':
+                            st.metric("Resistance", f"{predictions['resistance_level']:.5f}")
+                            st.metric("Support", f"{predictions['support_level']:.5f}")
+                        else:
+                            st.metric("Resistance", f"${predictions['resistance_level']:.2f}")
+                            st.metric("Support", f"${predictions['support_level']:.2f}")
+                    
+                    with col4:
+                        st.metric("Expected Move", f"{predictions['expected_move_pct']:+.1f}%")
+                        st.metric("Volatility Est.", f"{predictions['volatility_estimate']:.1f}%")
+                    
+                    # Confidence Analysis
+                    st.subheader(f"📊 {asset_class} Prediction Confidence")
+                    
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        # Confidence score with color coding
+                        confidence_score = confidence['overall_score']
                         
-                        with col1:
-                            if asset_class == 'FOREX':
-                                st.metric("Current Price", f"{current_price:.5f}")
-                            else:
-                                st.metric("Current Price", f"${current_price:.2f}")
+                        if confidence_score >= 70:
+                            st.success(f"🟢 **High Confidence**: {confidence_score:.1f}%")
+                        elif confidence_score >= 50:
+                            st.warning(f"🟡 **Medium Confidence**: {confidence_score:.1f}%")
+                        else:
+                            st.error(f"🔴 **Low Confidence**: {confidence_score:.1f}%")
                         
+                        st.write(f"**Interpretation:** {confidence['interpretation']}")
+                        
+                        # Confidence breakdown
+                        st.markdown("**📈 Confidence Breakdown:**")
+                        st.write(f"• Technical Signals: {confidence['technical_confidence']:.1f}%")
+                        st.write(f"• Momentum Analysis: {confidence['momentum_confidence']:.1f}%")
+                        st.write(f"• Volatility Assessment: {confidence['volatility_confidence']:.1f}%")
+                    
+                    with col2:
+                        # Technical signals summary
                         technical = prediction_result['technical_signals']
                         sentiment = prediction_result['sentiment_analysis']
                         
-                        with col2:
-                            st.metric("Technical Signal", technical['ma_signal'])
-                            st.metric("RSI", f"{technical['rsi_value']:.1f}")
+                        st.markdown("**🔧 Technical Signals:**")
                         
-                        with col3:
-                            st.metric("Momentum", sentiment['momentum_signal'])
-                            st.metric("Volatility Regime", sentiment['volatility_regime'])
+                        # Moving average signal
+                        ma_color = {"BULLISH": "🟢", "BEARISH": "🔴", "NEUTRAL": "🟡"}.get(technical['ma_signal'], "⚪")
+                        st.write(f"{ma_color} **Moving Averages:** {technical['ma_signal']}")
                         
-                        with col4:
-                            st.metric("Market Regime", sentiment['market_regime'])
-                            st.metric("Current Vol", f"{sentiment['current_volatility']:.1f}%")
+                        # RSI signal
+                        rsi_color = {"OVERBOUGHT": "🔴", "OVERSOLD": "🟢", "NEUTRAL": "🟡"}.get(technical['rsi_signal'], "⚪")
+                        st.write(f"{rsi_color} **RSI ({technical['rsi_value']}):** {technical['rsi_signal']}")
                         
-                        # Price Predictions
-                        st.subheader(f"🎯 {asset_class} Price Predictions ({prediction_days} days)")
+                        # Momentum
+                        # Momentum
+                        momentum_color = {
+                            "STRONG_UP": "🟢", "UP": "🟢", "STRONG_DOWN": "🔴", 
+                            "DOWN": "🔴", "NEUTRAL": "🟡"
+                        }.get(sentiment['momentum_signal'], "⚪")
+                        st.write(f"{momentum_color} **Momentum:** {sentiment['momentum_signal']}")
                         
-                        predictions = prediction_result['price_predictions']
-                        confidence = prediction_result['confidence_score']
+                        # Volatility regime
+                        vol_color = {"HIGH": "🔴", "NORMAL": "🟡", "LOW": "🟢"}.get(sentiment['volatility_regime'], "⚪")
+                        st.write(f"{vol_color} **Volatility:** {sentiment['volatility_regime']}")
+                    
+                    # Asset-Specific Analysis
+                    st.subheader(f"🎯 {asset_class}-Specific Analysis")
+                    
+                    asset_analysis = prediction_result['asset_specific_analysis']
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown(f"**📊 {asset_analysis['factor_type']}:**")
+                        st.write(f"• **Current Theme:** {asset_analysis['current_theme']}")
+                        st.write(f"• **Seasonality:** {asset_analysis['seasonality']}")
                         
-                        col1, col2, col3 = st.columns(3)
+                        st.markdown("**🔍 Key Factors:**")
+                        for factor in asset_analysis['key_factors']:
+                            st.write(f"• {factor}")
+                    
+                    with col2:
+                        # Technical summary
+                        st.markdown("**📈 Technical Summary:**")
+                        st.write(f"• **Trend Strength:** {technical.get('trend_strength', 0):.1f}%")
+                        st.write(f"• **BB Position:** {technical['bb_position']:.1f}%")
+                        if asset_class != 'FOREX':
+                            st.write(f"• **Volume Signal:** {technical['volume_signal']}")
                         
-                        with col1:
-                            st.markdown("#### 🐻 Bear Case")
-                            bear_price = predictions['bear_case']
-                            bear_change = (bear_price / current_price - 1) * 100
-                            if asset_class == 'FOREX':
-                                st.metric("Target Price", f"{bear_price:.5f}", f"{bear_change:.2f}%")
-                            else:
-                                st.metric("Target Price", f"${bear_price:.2f}", f"{bear_change:.2f}%")
+                        st.markdown("**📊 Market Regime:**")
+                        st.write(f"• **Type:** {sentiment['market_regime']}")
+                        st.write(f"• **Range:** {sentiment['range_percentage']:.1f}%")
+                        st.write(f"• **5D Momentum:** {sentiment['momentum_5d']:+.2f}%")
+                        st.write(f"• **20D Momentum:** {sentiment['momentum_20d']:+.2f}%")
+                    
+                    # Trading Recommendations
+                    st.subheader(f"💡 {asset_class} Trading Recommendations")
+                    
+                    recommendations = prediction_result['trading_recommendations']
+                    
+                    # Primary recommendation
+                    if recommendations['primary_recommendation']:
+                        primary = recommendations['primary_recommendation']
                         
-                        with col2:
-                            st.markdown("#### 🎯 Base Case")
-                            target_price = predictions['target_price']
-                            target_change = predictions['expected_move_pct']
-                            if asset_class == 'FOREX':
-                                st.metric("Target Price", f"{target_price:.5f}", f"{target_change:.2f}%")
-                            else:
-                                st.metric("Target Price", f"${target_price:.2f}", f"{target_change:.2f}%")
+                        # Color code by risk level
+                        risk_colors = {
+                            'LOW': '🟢',
+                            'MODERATE': '🟡', 
+                            'HIGH': '🔴'
+                        }
                         
-                        with col3:
-                            st.markdown("#### 🐂 Bull Case")
-                            bull_price = predictions['bull_case']
-                            bull_change = (bull_price / current_price - 1) * 100
-                            if asset_class == 'FOREX':
-                                st.metric("Target Price", f"{bull_price:.5f}", f"{bull_change:.2f}%")
-                            else:
-                                st.metric("Target Price", f"${bull_price:.2f}", f"{bull_change:.2f}%")
+                        risk_color = risk_colors.get(primary['risk_level'], '⚪')
                         
-                        # Support and Resistance
-                        st.subheader(f"📈 {asset_class} Key Levels")
+                        st.success(f"""
+                        **🎯 Primary Recommendation: {primary['strategy'].replace('_', ' ').title()}**
                         
-                        col1, col2, col3 = st.columns(3)
+                        {risk_color} **Risk Level:** {primary['risk_level']}
                         
-                        with col1:
-                            support = predictions['support_level']
-                            if asset_class == 'FOREX':
-                                st.metric("Support Level", f"{support:.5f}")
-                            else:
-                                st.metric("Support Level", f"${support:.2f}")
+                        **💡 Rationale:** {primary['rationale']}
                         
-                        with col2:
-                            if asset_class == 'FOREX':
-                                st.metric("Current Price", f"{current_price:.5f}")
-                            else:
-                                st.metric("Current Price", f"${current_price:.2f}")
+                        **🎯 Target:** {primary['target']}
+                        """)
+                    
+                    # Alternative strategies
+                    if recommendations['alternative_strategies']:
+                        st.markdown("**🔄 Alternative Strategies:**")
                         
-                        with col3:
-                            resistance = predictions['resistance_level']
-                            if asset_class == 'FOREX':
-                                st.metric("Resistance Level", f"{resistance:.5f}")
-                            else:
-                                st.metric("Resistance Level", f"${resistance:.2f}")
-                        
-                        # Confidence Analysis
-                        st.subheader(f"🎯 {asset_class} Prediction Confidence")
-                        
-                        col1, col2 = st.columns([2, 1])
-                        
-                        with col1:
-                            # Confidence progress bars
-                            st.markdown("**Overall Confidence**")
-                            st.progress(confidence['overall_score'] / 100)
-                            st.text(f"{confidence['overall_score']:.1f}% - {confidence['interpretation']}")
+                        for i, alt in enumerate(recommendations['alternative_strategies'][:3]):
+                            risk_color = risk_colors.get(alt['risk_level'], '⚪')
                             
-                            st.markdown("**Technical Confidence**")
-                            st.progress(confidence['technical_confidence'] / 100)
-                            st.text(f"{confidence['technical_confidence']:.1f}%")
-                            
-                            st.markdown("**Momentum Confidence**")
-                            st.progress(confidence['momentum_confidence'] / 100)
-                            st.text(f"{confidence['momentum_confidence']:.1f}%")
-                        
-                        with col2:
-                            # Confidence interpretation
-                            if confidence['overall_score'] >= 70:
-                                st.success("🟢 HIGH Confidence")
-                                st.markdown("Strong technical alignment supports prediction")
-                            elif confidence['overall_score'] >= 50:
-                                st.warning("🟡 MEDIUM Confidence")
-                                st.markdown("Mixed signals suggest caution")
-                            else:
-                                st.error("🔴 LOW Confidence")
-                                st.markdown("Conflicting signals indicate uncertainty")
-                        
-                        # Trading Recommendations
-                        st.subheader(f"💡 {asset_class} Trading Recommendations")
-                        
-                        recommendations = prediction_result['trading_recommendations']
-                        
-                        # Primary recommendation
-                        if recommendations.get('primary_recommendation'):
-                            primary = recommendations['primary_recommendation']
-                            
-                            st.success(f"**🏆 Primary Strategy: {primary['strategy']}**")
-                            st.markdown(f"**Rationale:** {primary['rationale']}")
-                            st.markdown(f"**Target:** {primary['target']}")
-                            st.markdown(f"**Risk Level:** {primary['risk_level']}")
-                        
-                        # Alternative strategies
-                        alternatives = recommendations.get('alternative_strategies', [])
-                        if alternatives:
-                            st.markdown("### 🔄 Alternative Strategies")
-                            for i, alt in enumerate(alternatives):
-                                with st.expander(f"Alternative {i+1}: {alt['strategy']}"):
-                                    st.markdown(f"**Rationale:** {alt['rationale']}")
-                                    st.markdown(f"**Target:** {alt['target']}")
-                                    st.markdown(f"**Risk Level:** {alt['risk_level']}")
-                        
-                        # Market Outlook
-                        st.subheader(f"🌍 {asset_class} Market Outlook")
+                            with st.expander(f"{alt['strategy'].replace('_', ' ').title()} ({alt['risk_level']} Risk)"):
+                                st.write(f"**Rationale:** {alt['rationale']}")
+                                st.write(f"**Target:** {alt['target']}")
+                                st.write(f"**Risk Level:** {risk_color} {alt['risk_level']}")
+                    
+                    # Market outlook and risks
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**🔮 Market Outlook:**")
                         
                         outlook = recommendations['market_outlook']
-                        time_horizon = recommendations['time_horizon']
+                        outlook_color = {
+                            'BULLISH': '🟢',
+                            'BEARISH': '🔴',
+                            'NEUTRAL': '🟡'
+                        }.get(outlook, '⚪')
                         
-                        if outlook == 'BULLISH':
-                            st.success(f"🐂 **{outlook}** over {time_horizon}")
-                        elif outlook == 'BEARISH':
-                            st.error(f"🐻 **{outlook}** over {time_horizon}")
-                        else:
-                            st.info(f"🟡 **{outlook}** over {time_horizon}")
+                        st.write(f"{outlook_color} **Direction:** {outlook}")
+                        st.write(f"**Time Horizon:** {recommendations['time_horizon']}")
+                    
+                    with col2:
+                        st.markdown("**⚠️ Key Risks:**")
                         
-                        # Key Risks
-                        risks = recommendations.get('key_risks', [])
-                        if risks:
-                            st.markdown("### ⚠️ Key Risks to Monitor")
-                            for risk in risks:
-                                st.markdown(f"• {risk}")
-                        
-                        # Asset-Specific Analysis
-                        asset_analysis = prediction_result['asset_specific_analysis']
-                        
-                        st.subheader(f"🎯 {asset_class}-Specific Analysis")
-                        
-                        st.markdown(f"**Factor Type:** {asset_analysis['factor_type']}")
-                        st.markdown(f"**Current Theme:** {asset_analysis['current_theme']}")
-                        st.markdown(f"**Seasonality:** {asset_analysis['seasonality']}")
-                        
-                        key_factors = asset_analysis.get('key_factors', [])
-                        if key_factors:
-                            st.markdown("**Key Factors to Watch:**")
-                            for factor in key_factors:
-                                st.markdown(f"• {factor}")
+                        for risk in recommendations['key_risks']:
+                            st.write(f"• {risk}")
+                    
+                    # Prediction Summary
+                    st.subheader(f"📋 {asset_class} Prediction Summary")
+                    
+                    # Create summary based on predictions
+                    expected_direction = "Upward" if predictions['expected_move_pct'] > 0 else "Downward" if predictions['expected_move_pct'] < 0 else "Sideways"
+                    move_magnitude = abs(predictions['expected_move_pct'])
+                    
+                    if move_magnitude > 5:
+                        move_size = "significant"
+                    elif move_magnitude > 2:
+                        move_size = "moderate"
+                    else:
+                        move_size = "minor"
+                    
+                    st.info(f"""
+                    **🎯 {asset_class} Prediction Summary for {prediction_result['ticker']}:**
+                    
+                    • **Expected Direction:** {expected_direction} movement over {prediction_days} days
+                    • **Magnitude:** {move_size} move of {predictions['expected_move_pct']:+.1f}%
+                    • **Confidence Level:** {confidence['interpretation']} ({confidence_score:.0f}%)
+                    • **Recommended Strategy:** {recommendations['primary_recommendation']['strategy'].replace('_', ' ').title() if recommendations['primary_recommendation'] else 'None'}
+                    • **Key Theme:** {asset_analysis['current_theme']}
+                    
+                    **Next Steps:** Monitor {asset_analysis['key_factors'][0].lower()} and consider {recommendations['primary_recommendation']['strategy'].lower().replace('_', ' ') if recommendations['primary_recommendation'] else 'alternative strategies'} based on market conditions.
+                    """)
                 
-                except Exception as e:
-                    st.error(f"❌ {asset_class} prediction failed: {str(e)}")
+                else:
+                    st.error(f"❌ Prediction failed: {prediction_result.get('error', 'Unknown error')}")
         
         else:
-            # Prediction instructions for current asset class
+            # Show prediction instructions for current asset class
             prediction_instructions = {
                 'INDICES': """
                 ## 🔮 Index Market Predictions
                 
-                AI-powered predictions for broad market movements with technical and sentiment analysis.
+                AI-powered market predictions for index ETFs and volatility products.
                 
                 ### 🎯 Index Prediction Features:
-                - **Market Breadth Analysis**: Sector rotation and broad market trends
-                - **Volatility Regime Detection**: Identify low/high vol environments
-                - **Technical Confluence**: Multiple timeframe technical analysis
+                - **Technical analysis** with multiple timeframe signals
+                - **Market breadth assessment** and sector rotation insights
+                - **Volatility regime analysis** for VIX and index behavior
+                - **Economic cycle considerations** for long-term predictions
                 
-                ### 💡 Use Cases:
-                - Portfolio hedging decisions
-                - Market timing for broad exposure
-                - Volatility strategy selection
+                ### 💡 Index-Specific Factors:
+                - Broad market sentiment and economic indicators
+                - Sector rotation and style factor impacts
+                - Federal Reserve policy and interest rate environment
+                - Global market correlations and risk sentiment
                 """,
                 
                 'EQUITIES': """
                 ## 🔮 Equity Market Predictions
                 
-                Company-specific predictions incorporating technical analysis and market conditions.
+                Comprehensive AI analysis for individual stock price predictions.
                 
                 ### 🎯 Equity Prediction Features:
-                - **Earnings Cycle Analysis**: Pre/post earnings movement patterns
-                - **Company-Specific Risk Assessment**: Individual stock considerations
-                - **Sector Rotation Impact**: How sector trends affect individual names
+                - **Company-specific analysis** with fundamental considerations
+                - **Earnings cycle impact** and announcement timing
+                - **Sector performance** and relative strength analysis
+                - **Technical pattern recognition** and momentum signals
                 
-                ### 💡 Use Cases:
-                - Earnings play preparation
-                - Individual stock options strategies
-                - Company-specific event trading
+                ### 💡 Equity-Specific Factors:
+                - Company fundamentals and earnings expectations
+                - Sector trends and competitive positioning
+                - News sentiment and analyst coverage
+                - Technical levels and chart patterns
                 """,
                 
                 'FOREX': """
                 ## 🔮 FX Market Predictions
                 
-                Currency predictions incorporating central bank policy and global macro themes.
+                Currency market predictions with global macro analysis and central bank insights.
                 
                 ### 🎯 FX Prediction Features:
-                - **Central Bank Policy Analysis**: Interest rate differentials and policy divergence
-                - **Global Macro Integration**: Economic data and risk sentiment
-                - **24/5 Market Considerations**: Continuous trading impact on strategies
+                - **Central bank policy analysis** and interest rate differentials
+                - **Global macro themes** and economic data impact
+                - **Risk sentiment assessment** and safe haven flows
+                - **Technical analysis** adapted for 24/5 FX markets
                 
-                ### 💡 Use Cases:
-                - Central bank event preparation
-                - Macro trend following
-                - Currency hedging decisions
+                ### 💡 FX-Specific Factors:
+                - Interest rate differentials and policy divergence
+                - Economic data releases and calendar events
+                - Geopolitical developments and risk sentiment
+                - Intervention risks and central bank communications
                 """
             }
             
             st.markdown(prediction_instructions[asset_class])
-
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "🌍 **Multi-Asset Options Dashboard** • Built with Streamlit • "
-        f"Powered by Polygon.io • Current Focus: **{asset_class}**"
-    )
 
 if __name__ == "__main__":
     main()
