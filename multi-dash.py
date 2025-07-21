@@ -1929,7 +1929,7 @@ def display_single_trade_instruction(rec: Dict, asset_class: str, strategy: str,
 
 def main():
     st.set_page_config(
-        page_title="Professional Options Dashboard",
+        page_title="Multi Asset Dashboard",
         page_icon="⚡",
         layout="wide",
         initial_sidebar_state="expanded"
@@ -1987,8 +1987,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Header
-    st.title("⚡ Professional Multi-Asset Options Dashboard")
-    st.caption("Advanced Options Trading • Real-Time Data • Professional Analytics")
+    st.title("Multi-Asset Options Dashboard")
     
     # Initialize session state
     if 'analysis_result' not in st.session_state:
