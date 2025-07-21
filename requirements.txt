@@ -24,3 +24,4 @@ yfinance>=0.2.0
 
 polygon-api-client>=1.0.0
 oandapyV20>=0.10.0
+polygon>=4.0.0
