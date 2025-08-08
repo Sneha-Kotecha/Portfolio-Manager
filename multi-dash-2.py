@@ -4227,6 +4227,88 @@ def display_ml_predictions(prediction_result: Dict, ticker: str):
     st.caption(f"Timeframe: {prediction_result['prediction_timeframe']}")
 
 # =============================================================================
+# MULTI-AGENT STRATEGY UTILITIES
+# =============================================================================
+
+class OptionsAgent:
+    """Autonomous agent that selects and tests an options strategy for a single asset."""
+
+    def __init__(self, strategist: MultiAssetOptionsStrategist, capital: float, risk_pct: float):
+        self.strategist = strategist
+        self.capital = capital
+        self.risk_pct = risk_pct
+        self.max_risk_amount = capital * (risk_pct / 100)
+
+    def analyze(self, symbol: str, asset_class: str) -> Dict:
+        """Run full analysis for a symbol and return optimal strategy details."""
+        try:
+            underlying = self.strategist.get_asset_data(symbol, asset_class)
+            options = self.strategist.get_options_data(symbol, asset_class, underlying['current_price'])
+            market_analysis = self.strategist.analyze_market_conditions(underlying)
+
+            # Evaluate core strategies and pick the highest suitability score
+            candidate_strategies = ['COVERED_CALL', 'CASH_SECURED_PUT', 'IRON_CONDOR']
+            scores = {
+                s: self.strategist._assess_market_suitability(s, market_analysis, asset_class)['score']
+                for s in candidate_strategies
+            }
+            best_strategy = max(scores, key=scores.get)
+
+            if best_strategy == 'COVERED_CALL':
+                rec = self.strategist.calculate_covered_call_accurate(
+                    options['calls'], underlying['current_price'], self.capital,
+                    asset_class, self.max_risk_amount
+                )
+            elif best_strategy == 'CASH_SECURED_PUT':
+                rec = self.strategist.calculate_cash_secured_put_accurate(
+                    options['puts'], underlying['current_price'], self.capital,
+                    asset_class, self.max_risk_amount
+                )
+            else:
+                rec = self.strategist.calculate_iron_condor_accurate(
+                    options['calls'], options['puts'], underlying['current_price'],
+                    self.capital, asset_class, self.max_risk_amount
+                )
+
+            predictor = MLPredictor()
+            prediction = predictor.predict_direction(underlying, market_analysis)
+
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=90)
+            backtest = self.strategist.run_accurate_backtest(
+                symbol, asset_class, best_strategy, start_date, end_date,
+                {'initial_capital': self.capital}
+            )
+
+            return {
+                'symbol': symbol,
+                'asset_class': asset_class,
+                'best_strategy': best_strategy,
+                'recommendation': rec.get('optimal_recommendation', rec),
+                'prediction': prediction,
+                'backtest': backtest,
+                'market_analysis': market_analysis
+            }
+        except Exception as e:
+            return {'symbol': symbol, 'error': str(e)}
+
+
+class MultiAgentManager:
+    """Coordinator that runs multiple OptionsAgent analyses."""
+
+    def __init__(self, strategist: MultiAssetOptionsStrategist, capital: float, risk_pct: float):
+        self.strategist = strategist
+        self.capital = capital
+        self.risk_pct = risk_pct
+
+    def analyze(self, symbols: List[str], asset_class: str) -> Dict[str, Dict]:
+        results = {}
+        for sym in symbols:
+            agent = OptionsAgent(self.strategist, self.capital, self.risk_pct)
+            results[sym] = agent.analyze(sym, asset_class)
+        return results
+
+# =============================================================================
 # MAIN STREAMLIT APPLICATION WITH USER CONTROLS
 # =============================================================================
 
@@ -5446,8 +5528,55 @@ def main():
                 - **OTM**: Out-of-the-money options
                 """)
 
-    # Tab 4: Market Scanner
+    # Tab 4: Market Scanner & Multi-Agent Analysis
     with tab4:
+        st.subheader("🤖 Multi-Agent Strategy Finder")
+
+        ma_asset_class = st.selectbox(
+            "Asset Class",
+            ['INDICES', 'EQUITIES', 'FOREX'],
+            key="ma_asset_class",
+            format_func=lambda x: {
+                'INDICES': '📊 Index ETFs',
+                'EQUITIES': '📈 Stocks',
+                'FOREX': '💱 FX Pairs'
+            }[x]
+        )
+
+        ma_symbols = st.text_input(
+            "Symbols (comma separated)",
+            key="ma_symbols",
+            placeholder="e.g. AAPL,MSFT" if ma_asset_class != 'FOREX' else "e.g. EURUSD,GBPUSD"
+        )
+
+        if st.button("Run Strategy Agents", key="run_ma") and ma_symbols:
+            symbols = [s.strip().upper() for s in ma_symbols.split(',') if s.strip()]
+            manager = MultiAgentManager(strategist, available_capital, portfolio_risk_pct)
+            st.session_state.multi_agent_results = manager.analyze(symbols, ma_asset_class)
+
+        if 'multi_agent_results' in st.session_state:
+            ma_results = st.session_state.multi_agent_results
+            table_rows = []
+            for sym, res in ma_results.items():
+                if res.get('error'):
+                    table_rows.append({'Symbol': sym, 'Error': res['error']})
+                    continue
+                prediction = res.get('prediction', {})
+                backtest = res.get('backtest', {})
+                metrics = backtest.get('performance_metrics', {}) if backtest.get('success') else {}
+                rec = res.get('recommendation') or {}
+                table_rows.append({
+                    'Symbol': sym,
+                    'Strategy': res.get('best_strategy', ''),
+                    'Prediction': prediction.get('direction', ''),
+                    'Confidence': f"{prediction.get('confidence',0):.1f}%" if prediction else '',
+                    'CAGR': f"{metrics.get('cagr',0):.1f}%" if metrics else '',
+                    'Max Profit': f"${rec.get('max_profit',0):,.0f}" if rec else ''
+                })
+            if table_rows:
+                st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
+
+        st.markdown("---")
         st.subheader("🎯 Professional Market Scanner")
         
         # Scanner controls
